@@ -22,3 +22,14 @@ def generate_auth_token(user):
     }
 
     return jwt.encode(payload, secret, algorithm="HS256")
+
+
+def decode_auth_token(token):
+    secret = os.getenv("JWT_SECRET_KEY")
+    if not secret:
+        raise ValueError("JWT_SECRET_KEY is not configured on the server")
+
+    try:
+        return jwt.decode(token, secret, algorithms=["HS256"])
+    except jwt.InvalidTokenError as exc:
+        raise ValueError("invalid auth token") from exc

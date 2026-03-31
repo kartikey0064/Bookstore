@@ -16,7 +16,7 @@
 from flask import Blueprint, jsonify, request
 from ..services.book_service import (
     list_books, get_book, create_book, update_book,
-    delete_book, set_user_rating, search_books, total_revenue,
+    delete_book, seed_sample_books, set_user_rating, search_books, total_revenue,
 )
 
 book_bp = Blueprint("books", __name__)
@@ -26,8 +26,9 @@ book_bp = Blueprint("books", __name__)
 
 @book_bp.get("/api/books")
 def get_books():
-    """Return all books, newest first."""
-    return jsonify(list_books()), 200
+    """Return all books, newest first, optionally filtered by search query."""
+    search = request.args.get("search", "").strip()
+    return jsonify(list_books(search=search)), 200
 
 
 @book_bp.get("/api/books/search")
@@ -47,6 +48,11 @@ def search():
 def get_revenue():
     """Return total revenue across all orders (admin only)."""
     return jsonify({"totalRevenue": total_revenue()}), 200
+
+
+@book_bp.post("/api/admin/books/seed")
+def seed_books():
+    return jsonify(seed_sample_books()), 201
 
 
 # ── 2. Variable paths after static ───────────────────────────

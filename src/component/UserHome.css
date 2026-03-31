@@ -278,6 +278,7 @@
   letter-spacing: .06em;
 }
 .status-badge.processing { background: rgba(91,155,214,.15); color: var(--info); }
+.status-badge.processed  { background: rgba(76,175,138,.15); color: var(--success); }
 .status-badge.confirmed  { background: rgba(76,175,138,.15); color: var(--success); }
 .status-badge.delivered  { background: rgba(76,175,138,.2);  color: var(--success); }
 .order-items { display: flex; flex-direction: column; gap: 4px; }

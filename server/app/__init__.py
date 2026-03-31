@@ -4,13 +4,16 @@ import os
 from flask import Flask, jsonify
 from dotenv import load_dotenv
 from flask_cors import CORS
+from pymongo.errors import PyMongoError
 
 from .extensions import mail
 from .routes.auth_routes import auth_bp
 from .routes.book_routes import book_bp
+from .routes.dashboard_routes import dashboard_bp
 from .routes.review_routes import review_bp
 from .routes.wishlist_routes import wishlist_bp
 from .routes.order_routes import order_bp
+from .routes.payment_routes import payment_bp
 from .routes.support_routes import support_bp
 from .routes.profile_routes import profile_bp
 from .routes.recommendation_routes import recommendation_bp
@@ -36,9 +39,11 @@ def create_app():
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(book_bp)
+    app.register_blueprint(dashboard_bp)
     app.register_blueprint(review_bp)
     app.register_blueprint(wishlist_bp)
     app.register_blueprint(order_bp)
+    app.register_blueprint(payment_bp)
     app.register_blueprint(support_bp)
     app.register_blueprint(profile_bp)
     app.register_blueprint(recommendation_bp)
@@ -46,5 +51,13 @@ def create_app():
     @app.errorhandler(ValueError)
     def handle_value_error(err):
         return jsonify({"error": str(err)}), 400
+
+    @app.errorhandler(RuntimeError)
+    def handle_runtime_error(err):
+        return jsonify({"error": str(err)}), 503
+
+    @app.errorhandler(PyMongoError)
+    def handle_pymongo_error(err):
+        return jsonify({"error": f"Database error: {err}"}), 503
 
     return app

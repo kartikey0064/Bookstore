@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
-
 import GoogleSignInButton from './GoogleSignInButton';
 import { saveSession } from '../lib/session';
 import './Login.css';
@@ -8,17 +8,52 @@ import './Login.css';
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
-const validateEmail = value => {
-  if (!value) return 'Email is required';
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Enter a valid email address';
-  return '';
+function isAdminRole(role) {
+  return role === 'admin' || role === 'super_admin';
+}
+
+const panelMotion = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.4 },
 };
 
-const validatePassword = value => {
-  if (!value) return 'Password is required';
-  if (value.length < 6) return 'Password must be at least 6 characters';
-  return '';
-};
+const validateEmail = value =>
+  !value
+    ? 'Email is required'
+    : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+      ? 'Enter a valid email address'
+      : '';
+
+const validatePassword = value =>
+  !value
+    ? 'Password is required'
+    : value.length < 6
+      ? 'Password must be at least 6 characters'
+      : '';
+
+function getFriendlyMessage(error) {
+  const message = error?.message || 'Something went wrong. Please try again.';
+  if (/Failed to fetch/i.test(message)) {
+    return 'Unable to reach the server. Please check your internet or backend URL.';
+  }
+  return message;
+}
+
+async function postJson(path, payload) {
+  const response = await fetch(`${API}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || 'Request failed.');
+  }
+
+  return data;
+}
 
 export default function Login() {
   const navigate = useNavigate();
@@ -52,22 +87,21 @@ export default function Login() {
     setErrors(current => ({ ...current, [name]: validate(name, value) }));
   }
 
-  async function handleAuthSuccess(data) {
-    saveSession(data);
-    navigate(data.role === 'admin' ? '/admin' : '/home', { replace: true });
+  function redirectForRole(role) {
+    navigate(isAdminRole(role) ? '/admin' : '/home', { replace: true });
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
     setServerErr('');
 
-    const allTouched = { email: true, password: true };
+    const nextTouched = { email: true, password: true };
     const nextErrors = {
       email: validateEmail(form.email),
       password: validatePassword(form.password),
     };
 
-    setTouched(allTouched);
+    setTouched(nextTouched);
     setErrors(nextErrors);
 
     if (Object.values(nextErrors).some(Boolean)) {
@@ -76,43 +110,34 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+      const data = await postJson('/api/auth/login', {
+        email: form.email.trim().toLowerCase(),
+        password: form.password,
       });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        setServerErr(data.error || 'Login failed. Please try again.');
-        return;
-      }
-
-      await handleAuthSuccess(data);
-    } catch {
-      setServerErr('Network error. Is the backend running?');
+      saveSession(data);
+      redirectForRole(data.role);
+    } catch (error) {
+      console.error('Login failed:', error);
+      setServerErr(getFriendlyMessage(error));
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleGoogleSignIn(credential) {
-    setServerErr('');
+  async function handleGoogleSuccess(credential) {
     setGoogleLoading(true);
+    setServerErr('');
 
     try {
-      const response = await fetch(`${API}/api/auth/google`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential, client_id: GOOGLE_CLIENT_ID }),
+      const data = await postJson('/api/auth/google', {
+        credential,
+        client_id: GOOGLE_CLIENT_ID,
       });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Google sign-in failed. Please try again.');
-      }
-
-      await handleAuthSuccess(data);
+      saveSession(data);
+      redirectForRole(data.role);
+    } catch (error) {
+      console.error('Google sign-in failed:', error);
+      setServerErr(getFriendlyMessage(error));
     } finally {
       setGoogleLoading(false);
     }
@@ -126,23 +151,19 @@ export default function Login() {
         <div className="auth-orb auth-orb-3" />
       </div>
 
-      <div className="auth-card">
-        <Link className="auth-back" to="/">
-          Back to home
-        </Link>
+      <motion.div className="auth-card" {...panelMotion}>
+        <Link className="auth-back" to="/">← Back to home</Link>
 
         <div className="auth-logo">
-          <h1>PageTurn</h1>
-          <p>Your curated bookstore</p>
+          <h1>Bookify</h1>
+          <p>Sign in to keep your cart, wishlist, and orders in sync.</p>
         </div>
 
         <div className="auth-tabs">
-          <button className="auth-tab active" type="button">
-            Sign In
-          </button>
+          <button className="auth-tab active" type="button">Sign In</button>
           <Link
             className="auth-tab"
-            style={{ textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ alignItems: 'center', display: 'flex', justifyContent: 'center', textAlign: 'center' }}
             to="/signup"
           >
             Sign Up
@@ -150,20 +171,21 @@ export default function Login() {
         </div>
 
         <div className="auth-social-block">
-          <GoogleSignInButton
-            disabled={loading || googleLoading}
-            onError={message => setServerErr(message)}
-            onSuccess={handleGoogleSignIn}
-            text="continue_with"
-          />
-          {googleLoading && <p className="google-signin-message">Finishing Google sign-in...</p>}
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <GoogleSignInButton
+              disabled={loading || googleLoading}
+              onError={message => setServerErr(message)}
+              onSuccess={handleGoogleSuccess}
+              text="continue_with"
+            />
+          </motion.div>
         </div>
 
         <div className="auth-divider">
-          <span>or use your email</span>
+          <span>or continue with email</span>
         </div>
 
-        <form className="auth-form" noValidate onSubmit={handleSubmit}>
+        <motion.form className="auth-form" noValidate onSubmit={handleSubmit} {...panelMotion}>
           <div className="form-field">
             <label className="form-label">Email Address</label>
             <input
@@ -198,27 +220,31 @@ export default function Login() {
                 {showPwd ? 'Hide' : 'Show'}
               </button>
             </div>
-            <span
-              className={`field-hint ${errors.password && touched.password ? 'err' : touched.password && !errors.password ? 'ok' : ''}`}
-            >
-              {touched.password && errors.password ? errors.password : touched.password && !errors.password ? 'OK' : ''}
+            <span className={`field-hint ${errors.password && touched.password ? 'err' : touched.password && !errors.password ? 'ok' : ''}`}>
+              {touched.password && errors.password ? errors.password : touched.password && !errors.password ? 'Password looks good' : ''}
             </span>
           </div>
 
           {serverErr && <div className="server-err">{serverErr}</div>}
 
-          <button className="auth-submit" disabled={loading || googleLoading} type="submit">
+          <motion.button
+            className="auth-submit"
+            disabled={loading || googleLoading}
+            type="submit"
+            whileHover={!loading && !googleLoading ? { scale: 1.05 } : {}}
+            whileTap={!loading && !googleLoading ? { scale: 0.95 } : {}}
+          >
             {loading ? <span className="spinner" /> : 'Sign In'}
-          </button>
-        </form>
+          </motion.button>
+        </motion.form>
 
-        <p style={{ textAlign: 'center', marginTop: 20, fontSize: '.85rem', color: 'var(--text-muted)' }}>
-          Don't have an account?{' '}
+        <p style={{ color: 'var(--text-muted)', fontSize: '.85rem', marginTop: 20, textAlign: 'center' }}>
+          Don&apos;t have an account?{' '}
           <Link style={{ color: 'var(--gold)', fontWeight: 600 }} to="/signup">
-            Create one
+            Create one →
           </Link>
         </p>
-      </div>
+      </motion.div>
     </div>
   );
 }

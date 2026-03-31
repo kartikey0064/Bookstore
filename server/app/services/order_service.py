@@ -4,7 +4,16 @@
 # ============================================================
 
 from datetime import datetime, timezone
+from bson import ObjectId
 from ..database.db_connection import get_db
+
+
+ORDER_STATUSES = {
+    "processing": "Processing",
+    "processed": "Processed",
+    "confirmed": "Confirmed",
+    "delivered": "Delivered",
+}
 
 
 # ─── Serialiser ──────────────────────────────────────────────
@@ -18,6 +27,7 @@ def _serialize_order(doc):
         "total":     doc.get("total",       0),
         "status":    doc.get("status",  "Processing"),
         "address":   doc.get("address",    {}),
+        "payment":   doc.get("payment",    {}),
         "createdAt": doc.get("created_at").isoformat() if doc.get("created_at") else None,
     }
 
@@ -39,11 +49,31 @@ def list_all_orders():
     return [_serialize_order(doc) for doc in docs]
 
 
+def update_order_status(order_id, status):
+    try:
+        oid = ObjectId(order_id)
+    except Exception as exc:
+        raise ValueError("invalid order id") from exc
+
+    normalized = ORDER_STATUSES.get((status or "").strip().lower())
+    if not normalized:
+        raise ValueError("status must be one of: Processing, Processed, Confirmed, Delivered")
+
+    db = get_db()
+    result = db.orders.update_one({"_id": oid}, {"$set": {"status": normalized}})
+    if result.matched_count == 0:
+        raise ValueError("order not found")
+
+    updated = db.orders.find_one({"_id": oid})
+    return _serialize_order(updated)
+
+
 # ─── Create order ─────────────────────────────────────────────
 def create_order(payload):
     email   = (payload.get("email") or "").strip().lower()
     items   =  payload.get("items") or []
     address =  payload.get("address") or {}
+    payment =  payload.get("payment") or {}
 
     if not email:
         raise ValueError("email is required")
@@ -80,6 +110,14 @@ def create_order(payload):
             "city":       (address.get("city")       or "").strip(),
             "postalCode": (address.get("postalCode") or "").strip(),
             "country":    (address.get("country")    or "").strip(),
+        },
+        "payment": {
+            "provider":  (payment.get("provider") or "").strip(),
+            "orderId":   (payment.get("orderId") or "").strip(),
+            "paymentId": (payment.get("paymentId") or "").strip(),
+            "signature": (payment.get("signature") or "").strip(),
+            "amount":    payment.get("amount", 0),
+            "currency":  (payment.get("currency") or "").strip(),
         },
         "created_at": datetime.now(timezone.utc),
     }

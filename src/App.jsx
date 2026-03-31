@@ -9,6 +9,10 @@ import UserHome from './component/UserHome';
 import { getSession } from './lib/session';
 import './App.css';
 
+function isAdminRole(role) {
+  return role === 'admin' || role === 'super_admin';
+}
+
 function RequireRole({ role, children }) {
   const user = getSession();
 
@@ -16,8 +20,8 @@ function RequireRole({ role, children }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (user.role !== role) {
-    return <Navigate to={user.role === 'admin' ? '/admin' : '/home'} replace />;
+  if ((role === 'admin' && !isAdminRole(user.role)) || (role !== 'admin' && user.role !== role)) {
+    return <Navigate to={isAdminRole(user.role) ? '/admin' : '/home'} replace />;
   }
 
   return children;

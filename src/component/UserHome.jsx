@@ -3,18 +3,30 @@
 //  Sidebar: Home | Search | Cart | My Orders | Wishlist | Logout
 // ============================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import CheckoutModal from './CheckoutModal';
 import Sidebar    from './Sidebar';
 import StarRating from './StarRating';
 import { toast }  from './Toast';
+import { clearSession, getSession, updateSession } from '../lib/session';
+import { loadRazorpayCheckout } from '../lib/razorpay';
 import './UserHome.css';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+function getBookCategories(book) {
+  if (Array.isArray(book?.categories) && book.categories.length) {
+    return book.categories.filter(Boolean);
+  }
+  return book?.category ? [book.category] : [];
+}
+const RAZORPAY_KEY = import.meta.env.VITE_RAZORPAY_KEY || '';
+
 export default function UserHome() {
   const navigate = useNavigate();
-  const user = JSON.parse(sessionStorage.getItem('pt_user') || '{}');
+  const user = getSession() || {};
 
   // ── Active sidebar panel ──────────────────────────────────
   const [panel, setPanel] = useState('home');
@@ -39,13 +51,15 @@ export default function UserHome() {
 
   // ── Search state ──────────────────────────────────────────
   const [searchQuery,    setSearchQuery]    = useState('');
-  const [searchBy,       setSearchBy]       = useState('all');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterAuthor,   setFilterAuthor]   = useState('');
   const [filterMinPrice, setFilterMinPrice] = useState('');
   const [filterMaxPrice, setFilterMaxPrice] = useState('');
   const [filterMinRating,setFilterMinRating]= useState(0);
-  const [searchResults,  setSearchResults]  = useState(null);
+  const [searchResults,  setSearchResults]  = useState([]);
+  const [searchLoading,  setSearchLoading]  = useState(false);
+  const [searchError,    setSearchError]    = useState('');
 
   // ── Quick-view modal ──────────────────────────────────────
   const [qv, setQv] = useState(null);
@@ -53,6 +67,32 @@ export default function UserHome() {
   // ── Checkout ──────────────────────────────────────────────
   const [showCheckout,  setShowCheckout]  = useState(false);
   const [placingOrder,  setPlacingOrder]  = useState(false);
+  const [checkoutProfile, setCheckoutProfile] = useState({
+    name: user.name || '',
+    email: user.email || '',
+    phone: user.phone || '',
+    addressLine: user.addressLine || '',
+    city: user.city || '',
+    postalCode: user.postalCode || '',
+    country: user.country || 'India',
+  });
+
+  async function requestJson(url, options) {
+    const response = await fetch(url, options);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || 'Request failed');
+    }
+    return data;
+  }
+
+  function friendlyErrorMessage(error, fallback) {
+    const message = error?.message || fallback;
+    if (/Failed to fetch/i.test(message)) {
+      return 'Unable to reach the backend. Please check your connection and deployed API URL.';
+    }
+    return message || fallback;
+  }
 
   // ════════════════════════════════════════════════════════════
   //  Data loading
@@ -79,6 +119,30 @@ export default function UserHome() {
       .catch(() => {});
   }, [user.email]);
 
+  useEffect(() => {
+    if (!user.email) return;
+    let alive = true;
+
+    fetch(`${API}/api/profile?email=${encodeURIComponent(user.email)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!alive || !d) return;
+        setCheckoutProfile(current => ({
+          ...current,
+          name: d.name || current.name || user.name || '',
+          email: d.email || current.email || user.email || '',
+          phone: d.phone || current.phone || '',
+          addressLine: d.addressLine || current.addressLine || '',
+          city: d.city || current.city || '',
+          postalCode: d.postalCode || current.postalCode || '',
+          country: d.country || current.country || 'India',
+        }));
+      })
+      .catch(() => {});
+
+    return () => { alive = false; };
+  }, [user.email, user.name]);
+
   // Load orders when panel switches to "orders"
   useEffect(() => {
     if (panel !== 'orders' || !user.email) return;
@@ -95,12 +159,63 @@ export default function UserHome() {
     localStorage.setItem('pt_cart', JSON.stringify(cart));
   }, [cart]);
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedQuery(searchQuery.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    let alive = true;
+
+    if (!debouncedQuery) {
+      setSearchResults([]);
+      setSearchError('');
+      setSearchLoading(false);
+      return () => {
+        alive = false;
+      };
+    }
+
+    setSearchLoading(true);
+    setSearchError('');
+
+    fetch(`${API}/api/books?search=${encodeURIComponent(debouncedQuery)}`)
+      .then(async response => {
+        const data = await response.json().catch(() => []);
+        if (!response.ok) {
+          throw new Error(data.error || 'Search failed.');
+        }
+        return data;
+      })
+      .then(data => {
+        if (!alive) return;
+        setSearchResults(Array.isArray(data) ? data : []);
+      })
+      .catch(error => {
+        console.error('Book search failed:', error);
+        if (!alive) return;
+        setSearchResults([]);
+        setSearchError(friendlyErrorMessage(error, 'Search is unavailable right now.'));
+      })
+      .finally(() => {
+        if (alive) {
+          setSearchLoading(false);
+        }
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [debouncedQuery]);
+
   // ════════════════════════════════════════════════════════════
   //  Derived data
   // ════════════════════════════════════════════════════════════
 
-  const categories  = ['All', ...Array.from(new Set(books.map(b => b.category).filter(Boolean)))];
-  const displayBooks = selCat === 'All' ? books : books.filter(b => b.category === selCat);
+  const categories  = ['All', ...Array.from(new Set(books.flatMap(book => getBookCategories(book))))];
   const cartCount   = cart.reduce((s, i) => s + i.qty, 0);
   const cartTotal   = cart.reduce((s, i) => s + i.price * i.qty, 0);
 
@@ -164,7 +279,7 @@ export default function UserHome() {
 
   function applyClientFilters(list) {
     return list.filter(b => {
-      if (filterCategory !== 'All' && b.category !== filterCategory) return false;
+      if (filterCategory !== 'All' && !getBookCategories(b).includes(filterCategory)) return false;
       if (filterAuthor && !b.author.toLowerCase().includes(filterAuthor.toLowerCase())) return false;
       if (filterMinPrice !== '' && b.price < parseFloat(filterMinPrice)) return false;
       if (filterMaxPrice !== '' && b.price > parseFloat(filterMaxPrice)) return false;
@@ -173,23 +288,18 @@ export default function UserHome() {
     });
   }
 
-  async function handleSearch(e) {
-    e.preventDefault();
-    if (!searchQuery.trim()) {
-      setSearchResults(applyClientFilters(books));
-      return;
-    }
-    try {
-      const res  = await fetch(`${API}/api/books/search?q=${encodeURIComponent(searchQuery)}&by=${searchBy}`);
-      const data = await res.json();
-      setSearchResults(applyClientFilters(Array.isArray(data) ? data : []));
-    } catch {
-      setSearchResults(applyClientFilters(books.filter(b =>
-        b.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        b.author.toLowerCase().includes(searchQuery.toLowerCase())
-      )));
-    }
-  }
+  const baseSearchResults = debouncedQuery ? searchResults : books;
+  const filteredSearchResults = useMemo(
+    () => applyClientFilters(baseSearchResults),
+    [baseSearchResults, filterAuthor, filterCategory, filterMaxPrice, filterMinPrice, filterMinRating]
+  );
+  const homeResults = useMemo(
+    () => {
+      const source = debouncedQuery ? searchResults : books;
+      return selCat === 'All' ? source : source.filter(book => getBookCategories(book).includes(selCat));
+    },
+    [books, debouncedQuery, searchResults, selCat]
+  );
 
   function clearSearch() {
     setSearchQuery('');
@@ -198,12 +308,131 @@ export default function UserHome() {
     setFilterMinPrice('');
     setFilterMaxPrice('');
     setFilterMinRating(0);
-    setSearchResults(null);
+    setSearchResults([]);
+    setSearchError('');
   }
 
   // ════════════════════════════════════════════════════════════
   //  Order placement
   // ════════════════════════════════════════════════════════════
+
+  async function placeOrderWithPayment(formValues) {
+    if (!cart.length) return;
+    if (!RAZORPAY_KEY) {
+      toast('VITE_RAZORPAY_KEY is not configured.', 'error');
+      return;
+    }
+
+    const items = cart.map(i => ({
+      id: i.id,
+      title: i.title,
+      price: Number(i.price),
+      quantity: i.qty,
+      image: i.image,
+    }));
+
+    setPlacingOrder(true);
+    try {
+      await loadRazorpayCheckout();
+
+      const paymentOrder = await requestJson(`${API}/api/create-order`, {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          amount: cartTotal,
+          user: {
+            name: formValues.name,
+            email: formValues.email,
+            phone: formValues.phone,
+            address: formValues.addressLine,
+          },
+          items,
+        }),
+      });
+
+      const options = {
+        key: RAZORPAY_KEY,
+        amount: paymentOrder.amount,
+        currency: 'INR',
+        order_id: paymentOrder.id,
+        name: 'Bookify',
+        description: `${cart.length} item${cart.length > 1 ? 's' : ''} in checkout`,
+        prefill: {
+          name: formValues.name,
+          email: formValues.email,
+          contact: `+91${formValues.phone}`,
+        },
+        notes: {
+          address: formValues.addressLine,
+        },
+        theme: {
+          color: '#5b9bd6',
+        },
+        modal: {
+          ondismiss: () => {
+            setPlacingOrder(false);
+          },
+        },
+        handler: async response => {
+          try {
+            const result = await requestJson(`${API}/api/verify-payment`, {
+              method: 'POST',
+              headers: { 'Content-Type':'application/json' },
+              body: JSON.stringify({
+                ...response,
+                email: formValues.email,
+                name: formValues.name,
+                phone: formValues.phone,
+                address: formValues.addressLine,
+                city: formValues.city,
+                postalCode: formValues.postalCode,
+                country: formValues.country,
+                items,
+                shipping: 0,
+                amount: paymentOrder.amount / 100,
+                currency: 'INR',
+              }),
+            });
+
+            setCheckoutProfile(current => ({
+              ...current,
+              name: result.profile?.name || current.name,
+              email: result.profile?.email || current.email,
+              phone: result.profile?.phone || current.phone,
+              addressLine: result.profile?.addressLine || current.addressLine,
+              city: result.profile?.city || current.city,
+              postalCode: result.profile?.postalCode || current.postalCode,
+              country: result.profile?.country || current.country,
+            }));
+
+            if (result.profile) {
+              updateSession(result.profile);
+            }
+
+            setOrders(prev => [result.order, ...prev]);
+            setCart([]);
+            setShowCheckout(false);
+            setPanel('orders');
+            toast('Payment successful! Order placed.', 'success');
+          } catch (error) {
+            toast(error.message || 'Payment verification failed.', 'error');
+          } finally {
+            setPlacingOrder(false);
+          }
+        },
+      };
+
+      const razorpay = new window.Razorpay(options);
+      razorpay.on('payment.failed', failure => {
+        setPlacingOrder(false);
+        toast(failure?.error?.description || 'Payment failed. Please try again.', 'error');
+      });
+      razorpay.open();
+    } catch (error) {
+      setPlacingOrder(false);
+      toast(error.message || 'Failed to start Razorpay checkout.', 'error');
+    }
+  }
 
   async function placeOrder() {
     if (!cart.length) return;
@@ -232,7 +461,10 @@ export default function UserHome() {
   // ════════════════════════════════════════════════════════════
 
   function handleLogout() {
-    sessionStorage.removeItem('pt_user');
+    const shouldLogout = window.confirm('Are you sure you want to log out?');
+    if (!shouldLogout) return;
+
+    clearSession();
     localStorage.removeItem('pt_cart');
     toast('Logged out', 'info');
     navigate('/login', { replace: true });
@@ -253,6 +485,14 @@ export default function UserHome() {
   // ════════════════════════════════════════════════════════════
   //  Book Card sub-component
   // ════════════════════════════════════════════════════════════
+
+  function handleTopbarSearchChange(event) {
+    const nextValue = event.target.value;
+    setSearchQuery(nextValue);
+    if (nextValue.trim() && panel !== 'search') {
+      setPanel('search');
+    }
+  }
 
   function BookCard({ book }) {
     const userRating = book.ratings?.[user.email] || 0;
@@ -281,7 +521,7 @@ export default function UserHome() {
 
         {/* Info */}
         <div className="book-info">
-          <p className="book-cat">{book.category}</p>
+          <p className="book-cat">{getBookCategories(book).join(' • ')}</p>
           <h3 className="book-title" title={book.title}>{book.title}</h3>
           <p className="book-author">by {book.author}</p>
 
@@ -322,6 +562,17 @@ export default function UserHome() {
       <div className="page-body">
         <h2 className="section-title">Browse <span>Books</span></h2>
 
+        {debouncedQuery && (
+          <div className="card" style={{ marginBottom:24 }}>
+            <p style={{ color:'var(--text-muted)', fontSize:'.82rem', marginBottom:6 }}>
+              Live results for <strong style={{ color:'var(--cream)' }}>&quot;{debouncedQuery}&quot;</strong>
+            </p>
+            <p style={{ color:'var(--text-muted)', fontSize:'.8rem' }}>
+              Use the sticky search bar above to keep filtering without leaving the page.
+            </p>
+          </div>
+        )}
+
         {/* Category bar */}
         <div className="cat-bar">
           {categories.map(cat => (
@@ -337,18 +588,24 @@ export default function UserHome() {
 
         {/* Book grid */}
         {loadErr && <p className="err-msg">{loadErr}</p>}
+        {searchError && debouncedQuery && <p className="err-msg">{searchError}</p>}
         {loading ? (
           <div className="loading-grid">
             {[...Array(8)].map((_, i) => <div key={i} className="book-card-skeleton" />)}
           </div>
-        ) : displayBooks.length === 0 ? (
+        ) : searchLoading ? (
+          <div className="empty-state">
+            <div className="spinner" style={{ margin:'0 auto 14px' }} />
+            <p>Searching books...</p>
+          </div>
+        ) : homeResults.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">📚</div>
-            <p>No books in this category yet.</p>
+            <p>{debouncedQuery ? `No books found for "${debouncedQuery}".` : 'No books in this category yet.'}</p>
           </div>
         ) : (
           <div className="books-grid">
-            {displayBooks.map(book => <BookCard key={book.id} book={book} />)}
+            {homeResults.map(book => <BookCard key={book.id} book={book} />)}
           </div>
         )}
       </div>
@@ -357,34 +614,22 @@ export default function UserHome() {
 
   // ── SEARCH panel ─────────────────────────────────────────
   function SearchPanel() {
-    const results = searchResults !== null ? searchResults : books;
     return (
       <div className="page-body">
         <h2 className="section-title">Search <span>&amp; Filter</span></h2>
 
         {/* Search form */}
         <div className="card" style={{ marginBottom:24 }}>
-          <form onSubmit={handleSearch} style={{ display:'flex', flexDirection:'column', gap:16 }}>
-            {/* Query + search by */}
-            <div style={{ display:'flex', gap:12 }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+            <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
               <input
                 className="input-field"
                 style={{ flex:1 }}
-                placeholder="Search books..."
+                placeholder="Search by title or author"
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
+                onChange={handleTopbarSearchChange}
               />
-              <select
-                className="input-field"
-                style={{ width:140 }}
-                value={searchBy}
-                onChange={e => setSearchBy(e.target.value)}
-              >
-                <option value="all">All fields</option>
-                <option value="name">Title</option>
-                <option value="author">Author</option>
-                <option value="id">Book ID</option>
-              </select>
+              <button type="button" className="btn-secondary" onClick={clearSearch}>Clear</button>
             </div>
 
             {/* Filters row */}
@@ -453,23 +698,33 @@ export default function UserHome() {
               </div>
             </div>
 
-            <div style={{ display:'flex', gap:12 }}>
-              <button type="submit" className="btn-primary" style={{ flex:1 }}>Search</button>
-              <button type="button" className="btn-secondary" onClick={clearSearch}>Clear</button>
-            </div>
-          </form>
+          </div>
         </div>
 
         {/* Results */}
         <p style={{ marginBottom:16, fontSize:'.85rem', color:'var(--text-muted)' }}>
-          {searchResults !== null ? `${results.length} result${results.length !== 1 ? 's' : ''} found` : `${books.length} books total`}
+          {debouncedQuery
+            ? `Searching for "${debouncedQuery}" • ${filteredSearchResults.length} result${filteredSearchResults.length !== 1 ? 's' : ''}`
+            : `${filteredSearchResults.length} books ready to browse`}
         </p>
-        {results.length === 0 ? (
+        {searchError && debouncedQuery && <p className="err-msg">{searchError}</p>}
+        {searchLoading ? (
+          <div className="empty-state">
+            <div className="spinner" style={{ margin:'0 auto 14px' }} />
+            <p>Searching books...</p>
+          </div>
+        ) : filteredSearchResults.length === 0 ? (
           <div className="empty-state"><div className="empty-icon">🔍</div><p>No books match your filters.</p></div>
         ) : (
-          <div className="books-grid">
-            {results.map(book => <BookCard key={book.id} book={book} />)}
-          </div>
+          <motion.div
+            key={`${debouncedQuery || 'all'}-${filterCategory}-${filterAuthor}-${filterMinPrice}-${filterMaxPrice}-${filterMinRating}`}
+            animate={{ opacity: 1, y: 0 }}
+            className="books-grid"
+            initial={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.25 }}
+          >
+            {filteredSearchResults.map(book => <BookCard key={book.id} book={book} />)}
+          </motion.div>
         )}
       </div>
     );
@@ -528,7 +783,7 @@ export default function UserHome() {
         )}
 
         {/* Checkout modal */}
-        {showCheckout && (
+        {false && showCheckout && (
           <div className="modal-backdrop" onClick={() => setShowCheckout(false)}>
             <div className="modal-box" onClick={e => e.stopPropagation()}>
               <h3 style={{ fontFamily:'var(--font-display)', marginBottom:16 }}>Confirm Order</h3>
@@ -646,6 +901,15 @@ export default function UserHome() {
             {panel === 'orders'   && '📦 My Orders'}
             {panel === 'wishlist' && '❤️ My Wishlist'}
           </span>
+          <div className="topbar-search">
+            <span aria-hidden="true">🔎</span>
+            <input
+              onChange={handleTopbarSearchChange}
+              placeholder="Search books or authors"
+              value={searchQuery}
+            />
+            {searchLoading && <span className="spinner" />}
+          </div>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <span style={{ fontSize:'.8rem', color:'var(--text-muted)' }}>
               Hi, {user.name || 'Reader'}
@@ -654,11 +918,21 @@ export default function UserHome() {
         </header>
 
         {/* Panels */}
-        {panel === 'home'     && <HomePanel />}
-        {panel === 'search'   && <SearchPanel />}
-        {panel === 'cart'     && <CartPanel />}
-        {panel === 'orders'   && <OrdersPanel />}
-        {panel === 'wishlist' && <WishlistPanel />}
+        {panel === 'home' && HomePanel()}
+        {panel === 'search' && SearchPanel()}
+        {panel === 'cart' && CartPanel()}
+        {panel === 'orders' && OrdersPanel()}
+        {panel === 'wishlist' && WishlistPanel()}
+
+        <CheckoutModal
+          cartCount={cartCount}
+          initialValues={checkoutProfile}
+          isOpen={showCheckout}
+          onClose={() => setShowCheckout(false)}
+          onSubmit={placeOrderWithPayment}
+          submitting={placingOrder}
+          total={cartTotal}
+        />
       </div>
 
       {/* Quick-view modal */}
@@ -673,7 +947,7 @@ export default function UserHome() {
                 className="qv-img"
               />
               <div className="qv-details">
-                <p className="book-cat">{qv.category}</p>
+                <p className="book-cat">{getBookCategories(qv).join(' • ')}</p>
                 <h2 style={{ fontFamily:'var(--font-display)', fontSize:'1.35rem', marginBottom:6 }}>{qv.title}</h2>
                 <p style={{ color:'var(--text-muted)', marginBottom:12 }}>by {qv.author}</p>
                 {qv.description && <p style={{ fontSize:'.875rem', marginBottom:14, lineHeight:1.7 }}>{qv.description}</p>}

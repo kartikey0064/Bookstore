@@ -1,5 +1,5 @@
 // ============================================================
-//  Introduction.jsx  –  Landing / splash page
+//  Introduction.jsx - Landing / splash page
 //  Links to /login and /signup
 // ============================================================
 
@@ -10,7 +10,6 @@ import './Introduction.css';
 export default function Introduction() {
   return (
     <div className="intro-page">
-      {/* Background decor */}
       <div className="intro-bg">
         <div className="intro-orb orb-1" />
         <div className="intro-orb orb-2" />
@@ -18,34 +17,36 @@ export default function Introduction() {
       </div>
 
       <nav className="intro-nav">
-        <span className="brand">📖 PageTurn</span>
-        <div style={{ display:'flex', gap:12 }}>
-          <Link to="/login"  className="nav-link-btn outline">Sign In</Link>
+        <span className="brand">Bookify</span>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <Link to="/login" className="nav-link-btn outline">Sign In</Link>
           <Link to="/signup" className="nav-link-btn filled">Get Started</Link>
         </div>
       </nav>
 
       <main className="intro-hero">
-        <p className="intro-eyebrow">Welcome to PageTurn</p>
+        <p className="intro-eyebrow">Welcome to Bookify</p>
         <h1 className="intro-headline">
-          Your curated<br />
-          <em>bookstore</em><br />
+          Your curated
+          <br />
+          <em>bookstore</em>
+          <br />
           experience.
         </h1>
         <p className="intro-sub">
-          Discover thousands of books, build your wishlist,<br />
+          Discover thousands of books, build your wishlist,
+          <br />
           track your orders, and rate what you've read.
         </p>
         <div className="intro-actions">
-          <Link to="/signup" className="btn-primary intro-cta">Start Reading →</Link>
-          <Link to="/login"  className="btn-secondary intro-cta">Sign In</Link>
+          <Link to="/signup" className="btn-primary intro-cta">Start Reading</Link>
+          <Link to="/login" className="btn-secondary intro-cta">Sign In</Link>
         </div>
       </main>
 
-      {/* Feature chips */}
       <div className="intro-chips">
-        {['📚 Huge Catalogue','⭐ Community Ratings','🛒 Easy Checkout','❤️ Wishlists','📦 Order Tracking'].map(f => (
-          <span key={f} className="chip">{f}</span>
+        {['Huge Catalogue', 'Community Ratings', 'Easy Checkout', 'Wishlists', 'Order Tracking'].map(feature => (
+          <span key={feature} className="chip">{feature}</span>
         ))}
       </div>
     </div>

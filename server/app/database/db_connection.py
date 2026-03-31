@@ -4,17 +4,25 @@ import os
 
 _client = None
 
+def _build_client_options(uri):
+    options = {
+        "serverSelectionTimeoutMS": 5000,
+        "connectTimeoutMS": 5000,
+    }
+
+    normalized = (uri or "").strip().lower()
+    if normalized.startswith("mongodb+srv://") or "tls=true" in normalized or "ssl=true" in normalized:
+        options["tlsCAFile"] = certifi.where()
+
+    return options
+
 def get_client():
     global _client
     if _client is None:
         uri = os.getenv("MONGO_URI")
         if not uri:
             raise RuntimeError("MONGO_URI is not set")
-        _client = MongoClient(
-            uri,
-            serverSelectionTimeoutMS=5000,
-            tlsCAFile=certifi.where(),
-        )
+        _client = MongoClient(uri, **_build_client_options(uri))
     return _client
 
 def get_db():

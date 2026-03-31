@@ -1,22 +1,27 @@
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
-
 import GoogleSignInButton from './GoogleSignInButton';
-import OtpInput from './OtpInput';
 import { saveSession } from '../lib/session';
 import './Login.css';
 import './Signup.css';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-const OTP_LENGTH = 6;
+
+const panelMotion = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.4 },
+};
 
 const validators = {
-  name: value => {
-    if (!value.trim()) return 'Full name is required';
-    if (value.trim().length < 2) return 'Name must be at least 2 characters';
-    return '';
-  },
+  name: value =>
+    !value.trim()
+      ? 'Full name is required'
+      : value.trim().length < 2
+        ? 'Name must be at least 2 characters'
+        : '',
   dob: value => {
     if (!value) return 'Date of birth is required';
     const age = (Date.now() - new Date(value)) / (1000 * 60 * 60 * 24 * 365.25);
@@ -24,11 +29,12 @@ const validators = {
     if (age > 120) return 'Enter a valid date of birth';
     return '';
   },
-  email: value => {
-    if (!value) return 'Email is required';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Enter a valid email address';
-    return '';
-  },
+  email: value =>
+    !value
+      ? 'Email is required'
+      : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+        ? 'Enter a valid email address'
+        : '',
   password: value => {
     if (!value) return 'Password is required';
     if (value.length < 8) return 'At least 8 characters required';
@@ -36,11 +42,8 @@ const validators = {
     if (!/[0-9]/.test(value)) return 'Add at least one number';
     return '';
   },
-  confirmPassword: (value, password) => {
-    if (!value) return 'Please confirm your password';
-    if (value !== password) return 'Passwords do not match';
-    return '';
-  },
+  confirmPassword: (value, password) =>
+    !value ? 'Please confirm your password' : value !== password ? 'Passwords do not match' : '',
 };
 
 const STEPS = [
@@ -48,6 +51,9 @@ const STEPS = [
   { label: 'Contact', fields: ['email'] },
   { label: 'Security', fields: ['password', 'confirmPassword'] },
 ];
+
+const strengthLabel = ['', 'Weak', 'Fair', 'Good', 'Strong'];
+const strengthColor = ['', '#e05757', '#e0a050', '#5b9bd6', '#4caf8a'];
 
 function strengthScore(password) {
   let score = 0;
@@ -58,8 +64,28 @@ function strengthScore(password) {
   return score;
 }
 
-const strengthLabel = ['', 'Weak', 'Fair', 'Good', 'Strong'];
-const strengthColor = ['', '#e05757', '#e0a050', '#5b9bd6', '#4caf8a'];
+function getFriendlyMessage(error) {
+  const message = error?.message || 'Something went wrong. Please try again.';
+  if (/Failed to fetch/i.test(message)) {
+    return 'Unable to reach the server. Please check your internet or backend URL.';
+  }
+  return message;
+}
+
+async function postJson(path, payload) {
+  const response = await fetch(`${API}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || 'Request failed.');
+  }
+
+  return data;
+}
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -78,53 +104,47 @@ export default function Signup() {
   const [serverErr, setServerErr] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [emailVerified, setEmailVerified] = useState(false);
-  const [sendingOtp, setSendingOtp] = useState(false);
-  const [verifyingOtp, setVerifyingOtp] = useState(false);
-  const [otpMessage, setOtpMessage] = useState({ text: '', type: '' });
+
+  function fieldState(name) {
+    if (!touched[name]) return '';
+    return errors[name] ? 'error' : 'ok';
+  }
+
+  function validateField(name, value, currentForm = form) {
+    if (name === 'confirmPassword') {
+      return validators.confirmPassword(value, currentForm.password);
+    }
+    return validators[name]?.(value) ?? '';
+  }
 
   function handleChange(event) {
     const { name, value } = event.target;
-    setForm(current => ({ ...current, [name]: value }));
+    const nextForm = { ...form, [name]: value };
+    setForm(nextForm);
     setServerErr('');
 
-    if (name === 'email') {
-      setOtp('');
-      setOtpSent(false);
-      setEmailVerified(false);
-      setOtpMessage({ text: '', type: '' });
+    if (touched[name]) {
+      setErrors(current => ({
+        ...current,
+        [name]: validateField(name, value, nextForm),
+      }));
     }
-
-    if (!touched[name]) {
-      return;
-    }
-
-    const nextError =
-      name === 'confirmPassword'
-        ? validators.confirmPassword(value, form.password)
-        : validators[name]?.(value) ?? '';
-
-    setErrors(current => ({ ...current, [name]: nextError }));
 
     if (name === 'password' && touched.confirmPassword) {
       setErrors(current => ({
         ...current,
-        confirmPassword: validators.confirmPassword(form.confirmPassword, value),
+        confirmPassword: validators.confirmPassword(nextForm.confirmPassword, value),
       }));
     }
   }
 
   function handleBlur(event) {
     const { name, value } = event.target;
-    const nextError =
-      name === 'confirmPassword'
-        ? validators.confirmPassword(value, form.password)
-        : validators[name]?.(value) ?? '';
-
     setTouched(current => ({ ...current, [name]: true }));
-    setErrors(current => ({ ...current, [name]: nextError }));
+    setErrors(current => ({
+      ...current,
+      [name]: validateField(name, value),
+    }));
   }
 
   function validateStep() {
@@ -132,10 +152,7 @@ export default function Signup() {
     const nextErrors = {};
 
     fields.forEach(field => {
-      nextErrors[field] =
-        field === 'confirmPassword'
-          ? validators.confirmPassword(form[field], form.password)
-          : validators[field]?.(form[field]) ?? '';
+      nextErrors[field] = validateField(field, form[field]);
     });
 
     setErrors(current => ({ ...current, ...nextErrors }));
@@ -150,32 +167,15 @@ export default function Signup() {
     return fields.every(field => !nextErrors[field]);
   }
 
-  function fieldState(name) {
-    if (!touched[name]) return '';
-    return errors[name] ? 'error' : 'ok';
-  }
-
   function handleNext(event) {
     event.preventDefault();
-    if (!validateStep()) {
-      return;
+    if (validateStep()) {
+      setStep(current => current + 1);
     }
-
-    if (step === 1 && !emailVerified) {
-      setServerErr('Verify your email with the OTP before continuing.');
-      return;
-    }
-
-    setStep(current => current + 1);
   }
 
   function handleBack() {
     setStep(current => current - 1);
-  }
-
-  async function handleAuthSuccess(data) {
-    saveSession(data);
-    navigate(data.role === 'admin' ? '/admin' : '/home', { replace: true });
   }
 
   async function handleSubmit(event) {
@@ -188,121 +188,37 @@ export default function Signup() {
     setServerErr('');
 
     try {
-      const response = await fetch(`${API}/api/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name.trim(),
-          dob: form.dob,
-          email: form.email.trim().toLowerCase(),
-          password: form.password,
-          role: 'user',
-        }),
+      const data = await postJson('/api/auth/register', {
+        name: form.name.trim(),
+        dob: form.dob,
+        email: form.email.trim().toLowerCase(),
+        password: form.password,
+        role: 'user',
       });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        setServerErr(data.error || 'Registration failed. Please try again.');
-        return;
-      }
-
-      await handleAuthSuccess(data);
-    } catch {
-      setServerErr('Network error. Is the backend running?');
+      saveSession(data);
+      navigate('/home', { replace: true });
+    } catch (error) {
+      console.error('Registration failed:', error);
+      setServerErr(getFriendlyMessage(error));
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleSendOtp() {
-    const emailError = validators.email(form.email);
-    setTouched(current => ({ ...current, email: true }));
-    setErrors(current => ({ ...current, email: emailError }));
-    setServerErr('');
-
-    if (emailError) {
-      return;
-    }
-
-    setSendingOtp(true);
-    setOtpMessage({ text: '', type: '' });
-
-    try {
-      const response = await fetch(`${API}/api/auth/send-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: form.email.trim().toLowerCase() }),
-      });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Could not send OTP. Please try again.');
-      }
-
-      setOtp('');
-      setOtpSent(true);
-      setEmailVerified(false);
-      setOtpMessage({ text: data.message || 'OTP sent successfully.', type: 'ok' });
-    } catch (error) {
-      setOtpMessage({ text: error.message || 'Could not send OTP. Please try again.', type: 'err' });
-    } finally {
-      setSendingOtp(false);
-    }
-  }
-
-  async function handleVerifyOtp() {
-    setServerErr('');
-
-    if (otp.length !== OTP_LENGTH) {
-      setOtpMessage({ text: 'Enter the full 6-digit OTP.', type: 'err' });
-      return;
-    }
-
-    setVerifyingOtp(true);
-    setOtpMessage({ text: '', type: '' });
-
-    try {
-      const response = await fetch(`${API}/api/auth/verify-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: form.email.trim().toLowerCase(),
-          otp,
-        }),
-      });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || 'OTP verification failed.');
-      }
-
-      setEmailVerified(true);
-      setOtpMessage({ text: data.message || 'Email verified successfully.', type: 'ok' });
-    } catch (error) {
-      setEmailVerified(false);
-      setOtpMessage({ text: error.message || 'OTP verification failed.', type: 'err' });
-    } finally {
-      setVerifyingOtp(false);
-    }
-  }
-
-  async function handleGoogleSignIn(credential) {
-    setServerErr('');
+  async function handleGoogleSuccess(credential) {
     setGoogleLoading(true);
+    setServerErr('');
 
     try {
-      const response = await fetch(`${API}/api/auth/google`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential, client_id: GOOGLE_CLIENT_ID }),
+      const data = await postJson('/api/auth/google', {
+        credential,
+        client_id: GOOGLE_CLIENT_ID,
       });
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Google sign-up failed. Please try again.');
-      }
-
-      await handleAuthSuccess(data);
+      saveSession(data);
+      navigate('/home', { replace: true });
+    } catch (error) {
+      console.error('Google signup failed:', error);
+      setServerErr(getFriendlyMessage(error));
     } finally {
       setGoogleLoading(false);
     }
@@ -318,46 +234,60 @@ export default function Signup() {
         <div className="auth-orb auth-orb-3" />
       </div>
 
-      <div className="auth-card" style={{ maxWidth: 480 }}>
-        <Link className="auth-back" to="/login">
-          Back to login
-        </Link>
+      <motion.div className="auth-card" style={{ maxWidth: 500 }} {...panelMotion}>
+        <Link className="auth-back" to="/login">← Back to login</Link>
 
         <div className="auth-logo">
-          <h1>PageTurn</h1>
-          <p>Create your account</p>
+          <h1>Bookify</h1>
+          <p>Create your account and start building your library.</p>
         </div>
 
-        <div className="auth-social-block">
-          <GoogleSignInButton
-            disabled={loading || googleLoading}
-            onError={message => setServerErr(message)}
-            onSuccess={handleGoogleSignIn}
-            text="signup_with"
-          />
-          {googleLoading && <p className="google-signin-message">Finishing Google sign-up...</p>}
+        <div className="auth-tabs">
+          <Link
+            className="auth-tab"
+            style={{ alignItems: 'center', display: 'flex', justifyContent: 'center', textAlign: 'center' }}
+            to="/login"
+          >
+            Sign In
+          </Link>
+          <button className="auth-tab active" type="button">Sign Up</button>
         </div>
 
-        <div className="auth-divider">
-          <span>or create an account with email</span>
-        </div>
+        {step === 0 && (
+          <>
+            <div className="auth-social-block">
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <GoogleSignInButton
+                  disabled={loading || googleLoading}
+                  onError={message => setServerErr(message)}
+                  onSuccess={handleGoogleSuccess}
+                  text="signup_with"
+                />
+              </motion.div>
+            </div>
+
+            <div className="auth-divider">
+              <span>or sign up with email</span>
+            </div>
+          </>
+        )}
 
         <div className="step-indicator">
-          {STEPS.map((item, index) => (
-            <React.Fragment key={item.label}>
+          {STEPS.map((currentStep, index) => (
+            <React.Fragment key={currentStep.label}>
               <div className={`step-dot ${index < step ? 'done' : index === step ? 'active' : ''}`}>
-                {index < step ? 'OK' : index + 1}
+                {index < step ? '✓' : index + 1}
               </div>
               {index < STEPS.length - 1 && <div className={`step-line ${index < step ? 'done' : ''}`} />}
             </React.Fragment>
           ))}
         </div>
         <p className="step-label">
-          Step {step + 1} of {STEPS.length} - <strong>{STEPS[step].label}</strong>
+          Step {step + 1} of {STEPS.length} — <strong>{STEPS[step].label}</strong>
         </p>
 
         {step === 0 && (
-          <form className="auth-form" noValidate onSubmit={handleNext}>
+          <motion.form className="auth-form" noValidate onSubmit={handleNext} {...panelMotion}>
             <div className="form-field">
               <label className="form-label">Full Name</label>
               <input
@@ -393,14 +323,14 @@ export default function Signup() {
 
             {serverErr && <div className="server-err">{serverErr}</div>}
 
-            <button className="auth-submit" disabled={googleLoading} type="submit">
-              Continue
-            </button>
-          </form>
+            <motion.button className="auth-submit" type="submit" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              Continue →
+            </motion.button>
+          </motion.form>
         )}
 
         {step === 1 && (
-          <form className="auth-form" noValidate onSubmit={handleNext}>
+          <motion.form className="auth-form" noValidate onSubmit={handleNext} {...panelMotion}>
             <div className="form-field">
               <label className="form-label">Email Address</label>
               <input
@@ -415,64 +345,23 @@ export default function Signup() {
                 value={form.email}
               />
               <span className={`field-hint ${fieldState('email') === 'ok' ? 'ok' : fieldState('email') === 'error' ? 'err' : ''}`}>
-                {emailVerified ? 'Email verified' : touched.email ? errors.email || 'Looks good' : ' '}
+                {touched.email ? errors.email || 'Looks good' : ' '}
               </span>
             </div>
-
-            <button
-              className="btn-secondary otp-trigger"
-              disabled={sendingOtp || !!validators.email(form.email)}
-              onClick={handleSendOtp}
-              type="button"
-            >
-              {sendingOtp ? 'Sending OTP...' : otpSent ? 'Resend OTP' : 'Send OTP'}
-            </button>
-
-            {otpSent && (
-              <div className="otp-panel">
-                <div className="otp-panel-head">
-                  <div>
-                    <h3>Email Verification</h3>
-                    <p>Enter the 6-digit code sent to {form.email.trim().toLowerCase()}.</p>
-                  </div>
-                  {emailVerified && <span className="otp-badge">Verified</span>}
-                </div>
-
-                <OtpInput
-                  disabled={sendingOtp || verifyingOtp || emailVerified}
-                  length={OTP_LENGTH}
-                  onChange={setOtp}
-                  value={otp}
-                />
-
-                {otpMessage.text && <p className={`otp-message ${otpMessage.type}`}>{otpMessage.text}</p>}
-
-                <button
-                  className="auth-submit"
-                  disabled={sendingOtp || verifyingOtp || emailVerified || otp.length !== OTP_LENGTH}
-                  onClick={handleVerifyOtp}
-                  type="button"
-                >
-                  {verifyingOtp ? <span className="spinner" /> : emailVerified ? 'Email Verified' : 'Verify OTP'}
-                </button>
-              </div>
-            )}
 
             {serverErr && <div className="server-err">{serverErr}</div>}
 
             <div style={{ display: 'flex', gap: 12 }}>
-              <button className="btn-secondary" onClick={handleBack} style={{ flex: 1 }} type="button">
-                Back
-              </button>
-              <button className="auth-submit" disabled={!emailVerified} style={{ flex: 2 }} type="submit">
-                Continue
-              </button>
+              <button className="btn-secondary" onClick={handleBack} style={{ flex: 1 }} type="button">← Back</button>
+              <motion.button className="auth-submit" style={{ flex: 2 }} type="submit" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                Continue →
+              </motion.button>
             </div>
-          </form>
+          </motion.form>
         )}
 
         {step === 2 && (
-          <form className="auth-form" noValidate onSubmit={handleSubmit}>
+          <motion.form className="auth-form" noValidate onSubmit={handleSubmit} {...panelMotion}>
             <div className="form-field">
               <label className="form-label">Password</label>
               <div className="field-wrap">
@@ -491,19 +380,14 @@ export default function Signup() {
                   {showPwd ? 'Hide' : 'Show'}
                 </button>
               </div>
-
               {form.password && (
                 <div className="strength-bar">
                   <div
                     className="strength-fill"
-                    style={{
-                      width: `${score * 25}%`,
-                      background: strengthColor[score],
-                    }}
+                    style={{ background: strengthColor[score], width: `${score * 25}%` }}
                   />
                 </div>
               )}
-
               <span className={`field-hint ${fieldState('password') === 'ok' ? 'ok' : fieldState('password') === 'error' ? 'err' : ''}`}>
                 {form.password ? (errors.password && touched.password ? errors.password : `Strength: ${strengthLabel[score]}`) : ' '}
               </span>
@@ -526,11 +410,7 @@ export default function Signup() {
                   {showConf ? 'Hide' : 'Show'}
                 </button>
               </div>
-              <span
-                className={`field-hint ${
-                  fieldState('confirmPassword') === 'ok' ? 'ok' : fieldState('confirmPassword') === 'error' ? 'err' : ''
-                }`}
-              >
+              <span className={`field-hint ${fieldState('confirmPassword') === 'ok' ? 'ok' : fieldState('confirmPassword') === 'error' ? 'err' : ''}`}>
                 {touched.confirmPassword ? errors.confirmPassword || 'Passwords match' : ' '}
               </span>
             </div>
@@ -538,23 +418,28 @@ export default function Signup() {
             {serverErr && <div className="server-err">{serverErr}</div>}
 
             <div style={{ display: 'flex', gap: 12 }}>
-              <button className="btn-secondary" onClick={handleBack} style={{ flex: 1 }} type="button">
-                Back
-              </button>
-              <button className="auth-submit" disabled={loading || googleLoading} style={{ flex: 2 }} type="submit">
+              <button className="btn-secondary" onClick={handleBack} style={{ flex: 1 }} type="button">← Back</button>
+              <motion.button
+                className="auth-submit"
+                disabled={loading || googleLoading}
+                style={{ flex: 2 }}
+                type="submit"
+                whileHover={!loading && !googleLoading ? { scale: 1.05 } : {}}
+                whileTap={!loading && !googleLoading ? { scale: 0.95 } : {}}
+              >
                 {loading ? <span className="spinner" /> : 'Create Account'}
-              </button>
+              </motion.button>
             </div>
-          </form>
+          </motion.form>
         )}
 
-        <p style={{ textAlign: 'center', marginTop: 20, fontSize: '.85rem', color: 'var(--text-muted)' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '.85rem', marginTop: 20, textAlign: 'center' }}>
           Already have an account?{' '}
           <Link style={{ color: 'var(--gold)', fontWeight: 600 }} to="/login">
-            Sign in
+            Sign in →
           </Link>
         </p>
-      </div>
+      </motion.div>
     </div>
   );
 }

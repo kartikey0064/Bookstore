@@ -12,6 +12,38 @@ def _clean(value):
     return (value or "").strip()
 
 
+def _base_user_document(email, name, dob, role, password_hash):
+    return {
+        "email": email,
+        "name": name,
+        "dob": dob,
+        "role": role,
+        "password_hash": password_hash,
+        **_base_profile_fields(),
+        "email_verified": True,
+    }
+
+
+def _normalize_admin_role(value):
+    role = _clean(value).lower().replace(" ", "_")
+    if role not in ("admin", "super_admin"):
+        raise ValueError("role must be either 'admin' or 'super_admin'")
+    return role
+
+
+def _require_admin_requester(requester_email):
+    requester = _clean(requester_email).lower()
+    if not requester:
+        raise ValueError("requester email is required")
+
+    db = get_db()
+    admin_user = db.users.find_one({"email": requester, "role": {"$in": ["admin", "super_admin"]}})
+    if not admin_user:
+        raise ValueError("only an admin user can create another admin account")
+
+    return admin_user
+
+
 def _load_google_auth():
     try:
         from google.auth.transport import requests as google_requests
@@ -32,6 +64,11 @@ def _serialize_user(user):
         "google_id": user.get("google_id", ""),
         "auth_provider": user.get("auth_provider", "local"),
         "email_verified": user.get("email_verified", False),
+        "phone": user.get("phone", ""),
+        "addressLine": user.get("address_line", ""),
+        "city": user.get("city", ""),
+        "postalCode": user.get("postal_code", ""),
+        "country": user.get("country", ""),
     }
 
 
@@ -76,18 +113,56 @@ def create_user(payload):
         raise ValueError("email already registered")
     consume_email_verification(email)
 
-    user_doc = {
-        "email": email,
-        "name": name,
-        "dob": dob,
-        "role": role,
-        "password_hash": generate_password_hash(password),
-        **_base_profile_fields(),
-        "email_verified": True,
-    }
+    user_doc = _base_user_document(
+        email=email,
+        name=name,
+        dob=dob,
+        role=role,
+        password_hash=generate_password_hash(password),
+    )
 
     db.users.insert_one(user_doc)
     return _build_auth_response(user_doc)
+
+
+def create_admin_user(payload):
+    requester = _require_admin_requester(payload.get("requesterEmail"))
+
+    email = _clean(payload.get("email")).lower()
+    password = payload.get("password") or ""
+    name = _clean(payload.get("name"))
+    dob = _clean(payload.get("dob"))
+    role = _normalize_admin_role(payload.get("role") or "admin")
+
+    if not email or not password:
+        raise ValueError("email and password are required")
+    if not name:
+        raise ValueError("name is required")
+    if not dob:
+        raise ValueError("date of birth is required")
+    if len(password) < 6:
+        raise ValueError("password must be at least 6 characters")
+    if role == "super_admin" and requester.get("role") != "super_admin":
+        raise ValueError("only a Super Admin can create another Super Admin account")
+
+    db = get_db()
+    if db.users.find_one({"email": email}):
+        raise ValueError("email already registered")
+
+    user_doc = _base_user_document(
+        email=email,
+        name=name,
+        dob=dob,
+        role=role,
+        password_hash=generate_password_hash(password),
+    )
+    user_doc["created_by_admin"] = _clean(payload.get("requesterEmail")).lower()
+
+    db.users.insert_one(user_doc)
+    return {
+        "message": "Admin Created Successfully",
+        "user": _serialize_user(user_doc),
+    }
 
 
 def login_user(payload):
