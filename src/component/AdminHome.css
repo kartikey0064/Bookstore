@@ -1,0 +1,170 @@
+/* ============================================================
+   AdminHome.css  —  Admin dashboard specific styles
+   ============================================================ */
+
+/* ── Stat cards grid ─────────────────────────────────────── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  transition: transform .2s var(--ease), box-shadow .2s;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--sh-sm);
+}
+.stat-card.gold {
+  background: linear-gradient(135deg, rgba(201,168,76,.12), rgba(201,168,76,.04));
+  border-color: rgba(201,168,76,.35);
+}
+.stat-icon { font-size: 1.6rem; }
+.stat-value {
+  font-size: 1.65rem;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--cream);
+  line-height: 1;
+}
+.stat-card.gold .stat-value { color: var(--gold); }
+.stat-label {
+  font-size: .78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+/* ── Data table ──────────────────────────────────────────── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .875rem;
+}
+.data-table thead tr {
+  border-bottom: 2px solid var(--border);
+}
+.data-table th {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.data-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover { background: rgba(255,255,255,.02); }
+
+/* ── Category tag (inventory) ────────────────────────────── */
+.cat-tag {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: .72rem;
+  font-weight: 600;
+  background: rgba(91,155,214,.12);
+  color: var(--info);
+  border: 1px solid rgba(91,155,214,.25);
+}
+
+/* ── Icon action buttons ─────────────────────────────────── */
+.icon-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 5px 8px;
+  cursor: pointer;
+  font-size: .9rem;
+  transition: all .15s;
+}
+.icon-btn.edit:hover { background: rgba(91,155,214,.12); border-color: rgba(91,155,214,.3); }
+.icon-btn.del:hover  { background: rgba(224,87,87,.12);  border-color: rgba(224,87,87,.3);  }
+
+/* ── Form 2-column row ───────────────────────────────────── */
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+/* ── Error msg ───────────────────────────────────────────── */
+.err-msg {
+  color: var(--danger);
+  background: rgba(224,87,87,.08);
+  border: 1px solid rgba(224,87,87,.2);
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  font-size: .875rem;
+  margin-bottom: 20px;
+}
+
+/* ── Modal shared (re-used from UserHome.css) ────────────── */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.65);
+  backdrop-filter: blur(6px);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn .2s var(--ease) both;
+}
+.modal-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 28px;
+  width: 100%; max-width: 480px;
+  position: relative;
+  box-shadow: var(--sh-lg);
+  animation: scaleIn .25s var(--ease) both;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal-close {
+  position: absolute; top:16px; right:16px;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text-muted); border-radius: 50%; width:30px; height:30px;
+  cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center;
+}
+.modal-close:hover { color: var(--text); }
+
+/* Status badge (shared) */
+.status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.status-badge.processing { background: rgba(91,155,214,.15); color: var(--info); }
+.status-badge.confirmed  { background: rgba(76,175,138,.15); color: var(--success); }
+.status-badge.delivered  { background: rgba(76,175,138,.2);  color: var(--success); }
+
+@media (max-width: 640px) {
+  .form-row-2 { grid-template-columns: 1fr; }
+  .stat-grid  { grid-template-columns: 1fr 1fr; }
+  .data-table { font-size: .78rem; }
+  .data-table th, .data-table td { padding: 8px 10px; }
+}

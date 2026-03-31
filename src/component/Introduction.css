@@ -1,0 +1,162 @@
+/* ============================================================
+   Introduction.css  —  Landing page styles
+   ============================================================ */
+
+.intro-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  padding: 0 24px 60px;
+}
+
+/* ── Background orbs ─────────────────────────────────────── */
+.intro-bg { position: absolute; inset: 0; pointer-events: none; }
+.intro-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+}
+.orb-1 {
+  width: 560px; height: 560px;
+  background: radial-gradient(circle, rgba(201,168,76,.22), transparent);
+  top: -180px; left: -150px;
+}
+.orb-2 {
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(91,155,214,.18), transparent);
+  bottom: -100px; right: -80px;
+}
+.orb-3 {
+  width: 240px; height: 240px;
+  background: radial-gradient(circle, rgba(76,175,138,.14), transparent);
+  top: 40%; right: 25%;
+}
+
+/* ── Top nav ─────────────────────────────────────────────── */
+.intro-nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 40px;
+  background: rgba(13,17,23,.8);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+  z-index: 100;
+}
+.brand {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--gold);
+}
+.nav-link-btn {
+  padding: 8px 20px;
+  border-radius: var(--r-md);
+  font-size: .875rem;
+  font-weight: 600;
+  transition: all .2s var(--ease);
+  cursor: pointer;
+}
+.nav-link-btn.outline {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.nav-link-btn.outline:hover {
+  border-color: var(--gold-dim);
+  color: var(--text);
+}
+.nav-link-btn.filled {
+  background: linear-gradient(135deg, var(--gold), var(--gold-dim));
+  color: #0d1117;
+  border: none;
+}
+.nav-link-btn.filled:hover {
+  background: linear-gradient(135deg, var(--gold-light), var(--gold));
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(201,168,76,.3);
+}
+
+/* ── Hero section ────────────────────────────────────────── */
+.intro-hero {
+  text-align: center;
+  position: relative;
+  z-index: 1;
+  margin-top: 80px;
+  max-width: 680px;
+}
+.intro-eyebrow {
+  font-size: .8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  color: var(--gold);
+  margin-bottom: 16px;
+}
+.intro-headline {
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 6vw, 4.2rem);
+  font-weight: 700;
+  color: var(--cream);
+  line-height: 1.1;
+  letter-spacing: -.02em;
+  margin-bottom: 20px;
+}
+.intro-headline em {
+  font-style: italic;
+  color: var(--gold);
+}
+.intro-sub {
+  font-size: 1rem;
+  color: var(--text-muted);
+  line-height: 1.7;
+  margin-bottom: 36px;
+}
+.intro-actions {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.intro-cta {
+  padding: 13px 30px !important;
+  font-size: .95rem !important;
+  border-radius: var(--r-md) !important;
+}
+
+/* ── Feature chips ───────────────────────────────────────── */
+.intro-chips {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 52px;
+  max-width: 700px;
+}
+.chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 8px 16px;
+  border-radius: 99px;
+  font-size: .8rem;
+  font-weight: 500;
+  transition: all .2s var(--ease);
+}
+.chip:hover {
+  border-color: var(--gold-dim);
+  color: var(--text);
+}
+
+@media (max-width: 480px) {
+  .intro-nav { padding: 14px 16px; }
+  .intro-hero { margin-top: 100px; }
+}

@@ -1,0 +1,166 @@
+/* ============================================================
+   Signup.css  –  Multi-step indicator styles
+   The base auth-page styles live in Login.css
+   ============================================================ */
+
+/* ── Step progress bar ───────────────────────────────────── */
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 8px;
+}
+
+.step-dot {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .8rem;
+  font-weight: 700;
+  background: var(--surface2);
+  border: 2px solid var(--border);
+  color: var(--text-muted);
+  transition: all .3s var(--ease);
+  flex-shrink: 0;
+}
+.step-dot.active {
+  background: rgba(201,168,76,.15);
+  border-color: var(--gold);
+  color: var(--gold);
+  box-shadow: 0 0 0 4px rgba(201,168,76,.12);
+}
+.step-dot.done {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #0d1117;
+}
+
+.step-line {
+  flex: 1;
+  max-width: 60px;
+  height: 2px;
+  background: var(--border);
+  transition: background .3s;
+}
+.step-line.done {
+  background: var(--gold);
+}
+
+/* ── Step label ──────────────────────────────────────────── */
+.step-label {
+  text-align: center;
+  font-size: .8rem;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+.step-label strong {
+  color: var(--gold);
+}
+
+.otp-trigger {
+  width: 100%;
+}
+
+.otp-panel {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.otp-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.otp-panel-head h3 {
+  margin: 0 0 4px;
+  font-size: .95rem;
+  color: var(--cream);
+}
+
+.otp-panel-head p {
+  margin: 0;
+  font-size: .8rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.otp-badge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(76, 175, 138, .14);
+  border: 1px solid rgba(76, 175, 138, .35);
+  color: var(--success);
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.otp-input-wrap {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.otp-box {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--cream);
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  transition: border-color .2s var(--ease), box-shadow .2s var(--ease), transform .2s var(--ease);
+}
+
+.otp-box:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px rgba(201, 168, 76, .12);
+  transform: translateY(-1px);
+}
+
+.otp-box:disabled {
+  opacity: .65;
+  cursor: not-allowed;
+}
+
+.otp-message {
+  margin: 0;
+  font-size: .8rem;
+}
+
+.otp-message.ok {
+  color: var(--success);
+}
+
+.otp-message.err {
+  color: var(--danger);
+}
+
+@media (max-width: 520px) {
+  .otp-input-wrap {
+    gap: 8px;
+  }
+
+  .otp-box {
+    border-radius: 12px;
+    font-size: 1rem;
+  }
+
+  .otp-panel-head {
+    flex-direction: column;
+  }
+}
