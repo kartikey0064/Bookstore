@@ -4,9 +4,10 @@ import os
 
 app = create_app()
 
-# Fail fast if MongoDB is unreachable
-ping_db()
-
 if __name__ == "__main__":
+    try:
+        ping_db()
+    except Exception as exc:
+        app.logger.warning("Database ping failed during startup: %s", exc)
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
