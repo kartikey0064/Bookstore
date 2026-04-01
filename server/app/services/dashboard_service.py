@@ -143,13 +143,14 @@ def get_admin_dashboard_snapshot(start_date=None, end_date=None):
 
     books = list(db.books.find())
     order_docs = list(db.orders.find().sort("created_at", -1))
-    user_docs = list(db.users.find({"role": {"$nin": ["admin", "super_admin"]}}))
     month_points = _month_series(resolved_start, resolved_end)
 
     filtered_orders = []
     recent_orders = []
     revenue_map = {day: 0.0 for day in current_dates}
     orders_map = {day: 0 for day in current_dates}
+    users_day_members = {day: set() for day in current_dates}
+    users_month_members = {month: set() for month in month_points}
     revenue_month_map = {month: 0.0 for month in month_points}
     current_total = 0.0
     previous_total = 0.0
@@ -157,6 +158,7 @@ def get_admin_dashboard_snapshot(start_date=None, end_date=None):
     for doc in order_docs:
         order_date = _safe_date(doc.get("created_at"))
         total = float(doc.get("total") or 0)
+        email = str(doc.get("user_email") or "").strip().lower()
         if not order_date:
             continue
 
@@ -167,6 +169,9 @@ def get_admin_dashboard_snapshot(start_date=None, end_date=None):
             revenue_map[order_date] += total
             orders_map[order_date] += 1
             revenue_month_map[_month_floor(order_date)] += total
+            if email:
+                users_day_members[order_date].add(email)
+                users_month_members[_month_floor(order_date)].add(email)
             current_total += total
         elif order_date in previous_date_set:
             previous_total += total
@@ -178,29 +183,21 @@ def get_admin_dashboard_snapshot(start_date=None, end_date=None):
     if not filtered_books and not start_date and not end_date:
         filtered_books = books
 
-    range_user_docs = [
-        user for user in user_docs
-        if _is_in_range(_safe_date(user.get("created_at")), resolved_start, resolved_end)
-    ]
-    users_month_map = {month: 0 for month in month_points}
-    for user in range_user_docs:
-        created_date = _safe_date(user.get("created_at"))
-        if created_date:
-            users_month_map[_month_floor(created_date)] += 1
-
     active_user_emails = {
         str(doc.get("user_email") or "").strip().lower()
         for doc in filtered_orders
         if str(doc.get("user_email") or "").strip()
     }
 
-    total_users = len(range_user_docs) or len(active_user_emails)
+    total_users = len(active_user_emails)
     total_books = len(filtered_books)
     total_orders = len(filtered_orders)
     total_revenue = round(sum(float(doc.get("total") or 0) for doc in filtered_orders), 2)
 
     rated_books = [float(book.get("rating") or 0) for book in filtered_books if float(book.get("rating") or 0) > 0]
     average_rating = round(sum(rated_books) / len(rated_books), 1) if rated_books else 0.0
+    books_day_map = {day: 0 for day in current_dates}
+    ratings_day_map = {day: {"sum": 0.0, "count": 0} for day in current_dates}
     books_month_map = {month: 0 for month in month_points}
     ratings_month_map = {month: {"sum": 0.0, "count": 0} for month in month_points}
     for book in filtered_books:
@@ -208,9 +205,12 @@ def get_admin_dashboard_snapshot(start_date=None, end_date=None):
         if not created_date:
             continue
         month_key = _month_floor(created_date)
+        books_day_map[created_date] += 1
         books_month_map[month_key] += 1
         rating = float(book.get("rating") or 0)
         if rating > 0:
+            ratings_day_map[created_date]["sum"] += rating
+            ratings_day_map[created_date]["count"] += 1
             ratings_month_map[month_key]["sum"] += rating
             ratings_month_map[month_key]["count"] += 1
 
@@ -233,8 +233,26 @@ def get_admin_dashboard_snapshot(start_date=None, end_date=None):
         {"label": _format_label(day, span), "value": orders_map[day]}
         for day in current_dates
     ]
+    users_daily = [
+        {"label": _format_label(day, span), "value": len(users_day_members[day])}
+        for day in current_dates
+    ]
+    books_daily = [
+        {"label": _format_label(day, span), "value": books_day_map[day]}
+        for day in current_dates
+    ]
+    ratings_daily = [
+        {
+            "label": _format_label(day, span),
+            "value": round(
+                ratings_day_map[day]["sum"] / ratings_day_map[day]["count"],
+                1,
+            ) if ratings_day_map[day]["count"] else 0,
+        }
+        for day in current_dates
+    ]
     users_over_time = [
-        {"label": _month_label(month), "value": users_month_map[month]}
+        {"label": _month_label(month), "value": len(users_month_members[month])}
         for month in month_points
     ]
     books_over_time = [
@@ -281,8 +299,11 @@ def get_admin_dashboard_snapshot(start_date=None, end_date=None):
             "revenueOverTime": revenue_over_time,
             "ordersOverTime": orders_over_time,
             "booksByCategory": books_by_category,
+            "usersDaily": users_daily,
             "usersOverTime": users_over_time,
+            "booksDaily": books_daily,
             "booksOverTime": books_over_time,
+            "ratingsDaily": ratings_daily,
             "ratingsOverTime": ratings_over_time,
             "revenueByMonth": revenue_by_month,
         },

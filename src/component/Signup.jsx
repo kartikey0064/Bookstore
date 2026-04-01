@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
+
 import GoogleSignInButton from './GoogleSignInButton';
+import OtpInput from './OtpInput';
 import { saveSession } from '../lib/session';
 import './Login.css';
 import './Signup.css';
@@ -104,6 +106,24 @@ export default function Signup() {
   const [serverErr, setServerErr] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpVerifyLoading, setOtpVerifyLoading] = useState(false);
+  const [otpMessage, setOtpMessage] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [otpCooldown, setOtpCooldown] = useState(0);
+
+  useEffect(() => {
+    if (otpCooldown <= 0) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      setOtpCooldown(current => Math.max(current - 1, 0));
+    }, 1000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [otpCooldown]);
 
   function fieldState(name) {
     if (!touched[name]) return '';
@@ -117,11 +137,24 @@ export default function Signup() {
     return validators[name]?.(value) ?? '';
   }
 
+  function resetOtpState() {
+    setOtp('');
+    setOtpSent(false);
+    setOtpVerified(false);
+    setOtpMessage('');
+    setOtpError('');
+    setOtpCooldown(0);
+  }
+
   function handleChange(event) {
     const { name, value } = event.target;
     const nextForm = { ...form, [name]: value };
     setForm(nextForm);
     setServerErr('');
+
+    if (name === 'email') {
+      resetOtpState();
+    }
 
     if (touched[name]) {
       setErrors(current => ({
@@ -176,6 +209,61 @@ export default function Signup() {
 
   function handleBack() {
     setStep(current => current - 1);
+  }
+
+  async function handleSendOtp() {
+    const emailError = validateField('email', form.email);
+    setTouched(current => ({ ...current, email: true }));
+    setErrors(current => ({ ...current, email: emailError }));
+    setServerErr('');
+    setOtpMessage('');
+    setOtpError('');
+
+    if (emailError) {
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      const data = await postJson('/api/auth/send-otp', {
+        email: form.email.trim().toLowerCase(),
+      });
+      setOtp('');
+      setOtpSent(true);
+      setOtpVerified(false);
+      setOtpMessage(data.message || 'Verification code sent to your email.');
+      setOtpCooldown(Number(data.expires_in_seconds || 60));
+    } catch (error) {
+      setOtpError(getFriendlyMessage(error));
+    } finally {
+      setOtpLoading(false);
+    }
+  }
+
+  async function handleVerifyOtp() {
+    setServerErr('');
+    setOtpMessage('');
+    setOtpError('');
+
+    if (otp.trim().length !== 6) {
+      setOtpError('Enter the 6-digit OTP.');
+      return;
+    }
+
+    setOtpVerifyLoading(true);
+    try {
+      const data = await postJson('/api/auth/verify-otp', {
+        email: form.email.trim().toLowerCase(),
+        otp: otp.trim(),
+      });
+      setOtpVerified(true);
+      setOtpMessage(data.message || 'Email verified successfully.');
+    } catch (error) {
+      setOtpVerified(false);
+      setOtpError(getFriendlyMessage(error));
+    } finally {
+      setOtpVerifyLoading(false);
+    }
   }
 
   async function handleSubmit(event) {
@@ -235,7 +323,7 @@ export default function Signup() {
       </div>
 
       <motion.div className="auth-card" style={{ maxWidth: 500 }} {...panelMotion}>
-        <Link className="auth-back" to="/login">← Back to login</Link>
+        <Link className="auth-back" to="/login">{'<-'} Back to login</Link>
 
         <div className="auth-logo">
           <h1>Bookify</h1>
@@ -253,7 +341,7 @@ export default function Signup() {
           <button className="auth-tab active" type="button">Sign Up</button>
         </div>
 
-        {step === 0 && (
+        {step === 0 ? (
           <>
             <div className="auth-social-block">
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
@@ -270,23 +358,23 @@ export default function Signup() {
               <span>or sign up with email</span>
             </div>
           </>
-        )}
+        ) : null}
 
         <div className="step-indicator">
           {STEPS.map((currentStep, index) => (
             <React.Fragment key={currentStep.label}>
               <div className={`step-dot ${index < step ? 'done' : index === step ? 'active' : ''}`}>
-                {index < step ? '✓' : index + 1}
+                {index < step ? 'OK' : index + 1}
               </div>
-              {index < STEPS.length - 1 && <div className={`step-line ${index < step ? 'done' : ''}`} />}
+              {index < STEPS.length - 1 ? <div className={`step-line ${index < step ? 'done' : ''}`} /> : null}
             </React.Fragment>
           ))}
         </div>
         <p className="step-label">
-          Step {step + 1} of {STEPS.length} — <strong>{STEPS[step].label}</strong>
+          Step {step + 1} of {STEPS.length} - <strong>{STEPS[step].label}</strong>
         </p>
 
-        {step === 0 && (
+        {step === 0 ? (
           <motion.form className="auth-form" noValidate onSubmit={handleNext} {...panelMotion}>
             <div className="form-field">
               <label className="form-label">Full Name</label>
@@ -321,15 +409,15 @@ export default function Signup() {
               </span>
             </div>
 
-            {serverErr && <div className="server-err">{serverErr}</div>}
+            {serverErr ? <div className="server-err">{serverErr}</div> : null}
 
             <motion.button className="auth-submit" type="submit" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              Continue →
+              Continue
             </motion.button>
           </motion.form>
-        )}
+        ) : null}
 
-        {step === 1 && (
+        {step === 1 ? (
           <motion.form className="auth-form" noValidate onSubmit={handleNext} {...panelMotion}>
             <div className="form-field">
               <label className="form-label">Email Address</label>
@@ -349,18 +437,80 @@ export default function Signup() {
               </span>
             </div>
 
-            {serverErr && <div className="server-err">{serverErr}</div>}
+            <div className="otp-panel">
+              <div className="otp-panel-head">
+                <div>
+                  <h3>Verify your email</h3>
+                  <p>
+                    We&apos;ll send a 6-digit code to <strong>{form.email.trim() || 'your email'}</strong>. Verify it before continuing.
+                  </p>
+                </div>
+                {otpVerified ? <span className="otp-badge">Verified</span> : null}
+              </div>
+
+              <button
+                className="auth-submit otp-trigger"
+                disabled={otpLoading || otpVerifyLoading || otpCooldown > 0}
+                onClick={handleSendOtp}
+                type="button"
+              >
+                {otpLoading
+                  ? 'Sending code...'
+                  : otpSent && otpCooldown > 0
+                    ? `Resend in ${otpCooldown}s`
+                    : otpSent
+                      ? 'Resend code'
+                      : 'Send verification code'}
+              </button>
+
+              {otpSent ? (
+                <>
+                  <OtpInput
+                    disabled={otpVerifyLoading || otpVerified}
+                    onChange={setOtp}
+                    value={otp}
+                  />
+
+                  <button
+                    className="btn-secondary"
+                    disabled={otpVerifyLoading || otpVerified}
+                    onClick={handleVerifyOtp}
+                    type="button"
+                  >
+                    {otpVerifyLoading ? 'Verifying...' : otpVerified ? 'Verified' : 'Verify code'}
+                  </button>
+                </>
+              ) : null}
+
+              {otpMessage ? <p className="otp-message ok">{otpMessage}</p> : null}
+              {otpError ? <p className="otp-message err">{otpError}</p> : null}
+            </div>
+
+            {serverErr ? <div className="server-err">{serverErr}</div> : null}
 
             <div style={{ display: 'flex', gap: 12 }}>
-              <button className="btn-secondary" onClick={handleBack} style={{ flex: 1 }} type="button">← Back</button>
-              <motion.button className="auth-submit" style={{ flex: 2 }} type="submit" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                Continue →
+              <button className="btn-secondary" onClick={handleBack} style={{ flex: 1 }} type="button">{'<-'} Back</button>
+              <motion.button
+                className="auth-submit"
+                disabled={!otpVerified}
+                style={{ flex: 2 }}
+                type="submit"
+                whileHover={otpVerified ? { scale: 1.05 } : {}}
+                whileTap={otpVerified ? { scale: 0.95 } : {}}
+              >
+                Continue
               </motion.button>
             </div>
-          </motion.form>
-        )}
 
-        {step === 2 && (
+            {!otpVerified ? (
+              <p className="otp-message" style={{ textAlign: 'center' }}>
+                Verify your email to continue.
+              </p>
+            ) : null}
+          </motion.form>
+        ) : null}
+
+        {step === 2 ? (
           <motion.form className="auth-form" noValidate onSubmit={handleSubmit} {...panelMotion}>
             <div className="form-field">
               <label className="form-label">Password</label>
@@ -380,14 +530,14 @@ export default function Signup() {
                   {showPwd ? 'Hide' : 'Show'}
                 </button>
               </div>
-              {form.password && (
+              {form.password ? (
                 <div className="strength-bar">
                   <div
                     className="strength-fill"
                     style={{ background: strengthColor[score], width: `${score * 25}%` }}
                   />
                 </div>
-              )}
+              ) : null}
               <span className={`field-hint ${fieldState('password') === 'ok' ? 'ok' : fieldState('password') === 'error' ? 'err' : ''}`}>
                 {form.password ? (errors.password && touched.password ? errors.password : `Strength: ${strengthLabel[score]}`) : ' '}
               </span>
@@ -415,10 +565,10 @@ export default function Signup() {
               </span>
             </div>
 
-            {serverErr && <div className="server-err">{serverErr}</div>}
+            {serverErr ? <div className="server-err">{serverErr}</div> : null}
 
             <div style={{ display: 'flex', gap: 12 }}>
-              <button className="btn-secondary" onClick={handleBack} style={{ flex: 1 }} type="button">← Back</button>
+              <button className="btn-secondary" onClick={handleBack} style={{ flex: 1 }} type="button">{'<-'} Back</button>
               <motion.button
                 className="auth-submit"
                 disabled={loading || googleLoading}
@@ -431,12 +581,12 @@ export default function Signup() {
               </motion.button>
             </div>
           </motion.form>
-        )}
+        ) : null}
 
         <p style={{ color: 'var(--text-muted)', fontSize: '.85rem', marginTop: 20, textAlign: 'center' }}>
           Already have an account?{' '}
           <Link style={{ color: 'var(--gold)', fontWeight: 600 }} to="/login">
-            Sign in →
+            Sign in
           </Link>
         </p>
       </motion.div>

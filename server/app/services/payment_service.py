@@ -16,8 +16,9 @@ def _load_razorpay():
         import razorpay
     except ImportError as exc:
         raise ValueError(
-            "Razorpay support requires the server dependencies from "
-            "'server/requirements.txt'. Run 'pip install -r server/requirements.txt'."
+            "Razorpay support requires the backend dependencies. "
+            "Run 'pip install -r requirements.txt' from the server folder "
+            "or 'pip install -r server/requirements.txt' from the project root."
         ) from exc
 
     return razorpay

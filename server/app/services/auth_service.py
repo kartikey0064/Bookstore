@@ -49,7 +49,11 @@ def _load_google_auth():
         from google.auth.transport import requests as google_requests
         from google.oauth2 import id_token
     except ImportError as exc:
-        raise ValueError("Google sign-in requires the server dependencies from 'requirements.txt'. Run 'pip install -r requirements.txt'.") from exc
+        raise ValueError(
+            "Google sign-in requires the backend dependencies. "
+            "Run 'pip install -r requirements.txt' from the server folder "
+            "or 'pip install -r server/requirements.txt' from the project root."
+        ) from exc
 
     return google_requests, id_token
 

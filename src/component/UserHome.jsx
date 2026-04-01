@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 //  UserHome.jsx  –  Main user dashboard
 //  Sidebar: Home | Search | Cart | My Orders | Wishlist | Logout
 // ============================================================
@@ -7,7 +7,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import CheckoutModal from './CheckoutModal';
-import Sidebar    from './Sidebar';
+import Layout from '../components/layout/Layout';
 import StarRating from './StarRating';
 import { toast }  from './Toast';
 import { clearSession, getSession, updateSession } from '../lib/session';
@@ -15,6 +15,51 @@ import { loadRazorpayCheckout } from '../lib/razorpay';
 import './UserHome.css';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+function HomeIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
+      <path d="M3 10.5 12 3l9 7.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M5 9.5V21h14V9.5" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
+      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+      <path d="m20 20-3.5-3.5" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function CartIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
+      <path d="M3 5h2l2.2 10.2A2 2 0 0 0 9.2 17H18a2 2 0 0 0 2-1.6L21 8H7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      <circle cx="10" cy="20" r="1.5" fill="currentColor" />
+      <circle cx="18" cy="20" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function BoxIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
+      <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M12 12 4 7.5M12 12l8-4.5M12 12v9" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function HeartIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
+      <path d="M12 20s-7-4.6-9-8.8C1.5 8.1 3.4 4 7.6 4c2 0 3.4 1 4.4 2.3C13 5 14.4 4 16.4 4 20.6 4 22.5 8.1 21 11.2 19 15.4 12 20 12 20Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
+  );
+}
 
 function getBookCategories(book) {
   if (Array.isArray(book?.categories) && book.categories.length) {
@@ -28,28 +73,28 @@ export default function UserHome() {
   const navigate = useNavigate();
   const user = getSession() || {};
 
-  // ── Active sidebar panel ──────────────────────────────────
+  // -- Active sidebar panel ----------------------------------
   const [panel, setPanel] = useState('home');
 
-  // ── Books & categories ────────────────────────────────────
+  // -- Books & categories ------------------------------------
   const [books,   setBooks]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState('');
   const [selCat,  setSelCat]  = useState('All');
 
-  // ── Cart (persisted in localStorage) ─────────────────────
+  // -- Cart (persisted in localStorage) ---------------------
   const [cart, setCart] = useState(() => {
     try { return JSON.parse(localStorage.getItem('pt_cart') || '[]'); } catch { return []; }
   });
 
-  // ── Wishlist (book id array) ──────────────────────────────
+  // -- Wishlist (book id array) ------------------------------
   const [wishlist,    setWishlist]    = useState([]);
 
-  // ── Orders ────────────────────────────────────────────────
+  // -- Orders ------------------------------------------------
   const [orders,      setOrders]      = useState([]);
   const [ordLoading,  setOrdLoading]  = useState(false);
 
-  // ── Search state ──────────────────────────────────────────
+  // -- Search state ------------------------------------------
   const [searchQuery,    setSearchQuery]    = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('All');
@@ -61,10 +106,10 @@ export default function UserHome() {
   const [searchLoading,  setSearchLoading]  = useState(false);
   const [searchError,    setSearchError]    = useState('');
 
-  // ── Quick-view modal ──────────────────────────────────────
+  // -- Quick-view modal --------------------------------------
   const [qv, setQv] = useState(null);
 
-  // ── Checkout ──────────────────────────────────────────────
+  // -- Checkout ----------------------------------------------
   const [showCheckout,  setShowCheckout]  = useState(false);
   const [placingOrder,  setPlacingOrder]  = useState(false);
   const [checkoutProfile, setCheckoutProfile] = useState({
@@ -94,9 +139,9 @@ export default function UserHome() {
     return message || fallback;
   }
 
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
   //  Data loading
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
 
   // Load books on mount
   useEffect(() => {
@@ -211,17 +256,17 @@ export default function UserHome() {
     };
   }, [debouncedQuery]);
 
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
   //  Derived data
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
 
   const categories  = ['All', ...Array.from(new Set(books.flatMap(book => getBookCategories(book))))];
   const cartCount   = cart.reduce((s, i) => s + i.qty, 0);
   const cartTotal   = cart.reduce((s, i) => s + i.price * i.qty, 0);
 
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
   //  Cart helpers
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
 
   function addToCart(book) {
     setCart(prev => {
@@ -235,9 +280,9 @@ export default function UserHome() {
   function removeFromCart(id)      { setCart(p => p.filter(i => i.id !== id)); }
   function updateQty(id, qty)      { if (qty < 1) { removeFromCart(id); return; } setCart(p => p.map(i => i.id === id ? { ...i, qty } : i)); }
 
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
   //  Wishlist helpers
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
 
   async function toggleWishlist(book) {
     const inList = wishlist.includes(book.id);
@@ -251,13 +296,13 @@ export default function UserHome() {
       const res  = await fetch(url, opts);
       const data = await res.json();
       setWishlist(Array.isArray(data.ids) ? data.ids : []);
-      toast(inList ? 'Removed from wishlist' : '❤️ Saved to wishlist', inList ? '' : 'success');
+      toast(inList ? 'Removed from wishlist' : 'Saved to wishlist', inList ? '' : 'success');
     } catch { toast('Failed to update wishlist', 'error'); }
   }
 
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
   //  Rating
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
 
   async function rateBook(bookId, stars) {
     try {
@@ -269,13 +314,13 @@ export default function UserHome() {
       const updated = await res.json();
       setBooks(prev => prev.map(b => b.id === bookId ? updated : b));
       if (qv?.id === bookId) setQv(updated);
-      toast(`Rated ${stars} ★`, 'success');
+      toast(`Rated ${stars} ?`, 'success');
     } catch { toast('Failed to save rating', 'error'); }
   }
 
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
   //  Search
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
 
   function applyClientFilters(list) {
     return list.filter(b => {
@@ -312,9 +357,9 @@ export default function UserHome() {
     setSearchError('');
   }
 
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
   //  Order placement
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
 
   async function placeOrderWithPayment(formValues) {
     if (!cart.length) return;
@@ -451,14 +496,14 @@ export default function UserHome() {
       setCart([]);
       setShowCheckout(false);
       setPanel('orders');
-      toast('✅ Order placed successfully!', 'success');
+      toast('? Order placed successfully!', 'success');
     } catch { toast('Failed to place order. Try again.', 'error'); }
     finally { setPlacingOrder(false); }
   }
 
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
   //  Logout
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
 
   function handleLogout() {
     const shouldLogout = window.confirm('Are you sure you want to log out?');
@@ -470,21 +515,29 @@ export default function UserHome() {
     navigate('/login', { replace: true });
   }
 
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
   //  Sidebar nav
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
 
   const navItems = [
-    { id:'home',     icon:'🏠', label:'Home' },
-    { id:'search',   icon:'🔍', label:'Search & Filter' },
-    { id:'cart',     icon:'🛒', label:'Cart',      badge: cartCount },
-    { id:'orders',   icon:'📦', label:'My Orders' },
-    { id:'wishlist', icon:'❤️', label:'Wishlist',  badge: wishlist.length },
+    { id: 'home', icon: <HomeIcon />, label: 'Browse Books' },
+    { id: 'search', icon: <SearchIcon />, label: 'Search' },
+    { id: 'cart', icon: <CartIcon />, label: 'Cart', badge: cartCount },
+    { id: 'orders', icon: <BoxIcon />, label: 'My Orders' },
+    { id: 'wishlist', icon: <HeartIcon />, label: 'Wishlist', badge: wishlist.length },
   ];
 
-  // ════════════════════════════════════════════════════════════
+  const panelTitle = {
+    home: 'Browse Books',
+    search: 'Search and Filter',
+    cart: 'My Cart',
+    orders: 'My Orders',
+    wishlist: 'My Wishlist',
+  };
+
+  // ------------------------------------------------------------
   //  Book Card sub-component
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
 
   function handleTopbarSearchChange(event) {
     const nextValue = event.target.value;
@@ -505,13 +558,16 @@ export default function UserHome() {
           className={`wish-btn ${inWish ? 'active' : ''}`}
           onClick={() => toggleWishlist(book)}
           title={inWish ? 'Remove from wishlist' : 'Add to wishlist'}
-        >♥</button>
+          type="button"
+        >
+          <HeartIcon />
+        </button>
 
         {/* Cover */}
         <div className="book-cover" onClick={() => setQv(book)}>
           <img
             src={book.image || 'https://via.placeholder.com/160x220/1e2535/7b879f?text=No+Cover'}
-            alt={book.title}
+            alt={book.title || book.name}
             loading="lazy"
           />
           <div className="cover-overlay">
@@ -522,7 +578,7 @@ export default function UserHome() {
         {/* Info */}
         <div className="book-info">
           <p className="book-cat">{getBookCategories(book).join(' • ')}</p>
-          <h3 className="book-title" title={book.title}>{book.title}</h3>
+          <h3 className="book-title" title={book.title || book.name}>{book.title || book.name}</h3>
           <p className="book-author">by {book.author}</p>
 
           {/* Average rating (auto-calculated on backend) */}
@@ -544,7 +600,7 @@ export default function UserHome() {
           </div>
 
           <div className="book-footer">
-            <span className="book-price">₹{Number(book.price).toFixed(0)}</span>
+            <span className="book-price">Rs. {Number(book.price).toFixed(0)}</span>
             <button className="add-cart-btn" onClick={() => addToCart(book)}>+ Cart</button>
           </div>
         </div>
@@ -552,11 +608,11 @@ export default function UserHome() {
     );
   }
 
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
   //  Panel renderers
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
 
-  // ── HOME panel ────────────────────────────────────────────
+  // -- HOME panel --------------------------------------------
   function HomePanel() {
     return (
       <div className="page-body">
@@ -600,7 +656,7 @@ export default function UserHome() {
           </div>
         ) : homeResults.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-icon">📚</div>
+            <div className="empty-icon">BK</div>
             <p>{debouncedQuery ? `No books found for "${debouncedQuery}".` : 'No books in this category yet.'}</p>
           </div>
         ) : (
@@ -612,7 +668,7 @@ export default function UserHome() {
     );
   }
 
-  // ── SEARCH panel ─────────────────────────────────────────
+  // -- SEARCH panel -----------------------------------------
   function SearchPanel() {
     return (
       <div className="page-body">
@@ -659,7 +715,7 @@ export default function UserHome() {
 
               {/* Price range */}
               <div>
-                <label className="form-label">Min Price (₹)</label>
+                <label className="form-label">Min Price (?)</label>
                 <input
                   className="input-field"
                   type="number" min="0"
@@ -669,7 +725,7 @@ export default function UserHome() {
                 />
               </div>
               <div>
-                <label className="form-label">Max Price (₹)</label>
+                <label className="form-label">Max Price (?)</label>
                 <input
                   className="input-field"
                   type="number" min="0"
@@ -714,7 +770,7 @@ export default function UserHome() {
             <p>Searching books...</p>
           </div>
         ) : filteredSearchResults.length === 0 ? (
-          <div className="empty-state"><div className="empty-icon">🔍</div><p>No books match your filters.</p></div>
+          <div className="empty-state"><div className="empty-icon">SR</div><p>No books match your filters.</p></div>
         ) : (
           <motion.div
             key={`${debouncedQuery || 'all'}-${filterCategory}-${filterAuthor}-${filterMinPrice}-${filterMaxPrice}-${filterMinRating}`}
@@ -730,14 +786,14 @@ export default function UserHome() {
     );
   }
 
-  // ── CART panel ────────────────────────────────────────────
+  // -- CART panel --------------------------------------------
   function CartPanel() {
     return (
       <div className="page-body">
         <h2 className="section-title">Shopping <span>Cart</span></h2>
         {cart.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-icon">🛒</div>
+            <div className="empty-icon">CT</div>
             <p>Your cart is empty.</p>
             <button className="btn-primary" style={{ marginTop:16 }} onClick={() => setPanel('home')}>
               Browse Books
@@ -756,24 +812,24 @@ export default function UserHome() {
                   <div className="cart-meta">
                     <p className="cart-title">{item.title}</p>
                     <p className="cart-author">{item.author}</p>
-                    <p className="cart-price">₹{Number(item.price).toFixed(0)} each</p>
+                    <p className="cart-price">Rs. {Number(item.price).toFixed(0)} each</p>
                   </div>
                   <div className="cart-qty-wrap">
-                    <button className="qty-btn" onClick={() => updateQty(item.id, item.qty - 1)}>−</button>
+                    <button className="qty-btn" onClick={() => updateQty(item.id, item.qty - 1)}>-</button>
                     <span className="qty-val">{item.qty}</span>
                     <button className="qty-btn" onClick={() => updateQty(item.id, item.qty + 1)}>+</button>
                   </div>
-                  <div className="cart-line-total">₹{(item.price * item.qty).toFixed(0)}</div>
-                  <button className="cart-remove" onClick={() => removeFromCart(item.id)} title="Remove">✕</button>
+                  <div className="cart-line-total">Rs. {(item.price * item.qty).toFixed(0)}</div>
+                  <button className="cart-remove" onClick={() => removeFromCart(item.id)} title="Remove">?</button>
                 </div>
               ))}
             </div>
 
             {/* Summary */}
             <div className="cart-summary card">
-              <div className="summary-row"><span>Subtotal</span><span>₹{cartTotal.toFixed(0)}</span></div>
+              <div className="summary-row"><span>Subtotal</span><span>Rs. {cartTotal.toFixed(0)}</span></div>
               <div className="summary-row"><span>Shipping</span><span style={{ color:'var(--success)' }}>Free</span></div>
-              <div className="summary-row total"><span>Total</span><span>₹{cartTotal.toFixed(0)}</span></div>
+              <div className="summary-row total"><span>Total</span><span>Rs. {cartTotal.toFixed(0)}</span></div>
               <button className="btn-primary" style={{ width:'100%', marginTop:16, padding:'13px' }}
                 onClick={() => setShowCheckout(true)}>
                 Proceed to Checkout
@@ -788,12 +844,12 @@ export default function UserHome() {
             <div className="modal-box" onClick={e => e.stopPropagation()}>
               <h3 style={{ fontFamily:'var(--font-display)', marginBottom:16 }}>Confirm Order</h3>
               <p style={{ color:'var(--text-muted)', marginBottom:8, fontSize:'.875rem' }}>
-                {cart.length} item{cart.length > 1 ? 's' : ''} · Total ₹{cartTotal.toFixed(0)}
+                {cart.length} item{cart.length > 1 ? 's' : ''} · Total Rs. {cartTotal.toFixed(0)}
               </p>
               {cart.map(i => (
                 <div key={i.id} style={{ display:'flex', justifyContent:'space-between', fontSize:'.85rem', padding:'6px 0', borderBottom:'1px solid var(--border)' }}>
                   <span>{i.title} × {i.qty}</span>
-                  <span style={{ color:'var(--gold)' }}>₹{(i.price * i.qty).toFixed(0)}</span>
+                  <span style={{ color:'var(--gold)' }}>Rs. {(i.price * i.qty).toFixed(0)}</span>
                 </div>
               ))}
               <div style={{ display:'flex', gap:12, marginTop:20 }}>
@@ -809,7 +865,7 @@ export default function UserHome() {
     );
   }
 
-  // ── ORDERS panel ─────────────────────────────────────────
+  // -- ORDERS panel -----------------------------------------
   function OrdersPanel() {
     return (
       <div className="page-body">
@@ -818,7 +874,7 @@ export default function UserHome() {
           <p style={{ color:'var(--text-muted)' }}>Loading orders…</p>
         ) : orders.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-icon">📦</div>
+            <div className="empty-icon">OD</div>
             <p>You haven't placed any orders yet.</p>
           </div>
         ) : (
@@ -842,13 +898,13 @@ export default function UserHome() {
                     <div key={i} className="order-item-row">
                       <span>{item.title}</span>
                       <span style={{ color:'var(--text-muted)' }}>× {item.quantity}</span>
-                      <span style={{ color:'var(--gold)' }}>₹{(item.price * item.quantity).toFixed(0)}</span>
+                      <span style={{ color:'var(--gold)' }}>Rs. {(item.price * item.quantity).toFixed(0)}</span>
                     </div>
                   ))}
                 </div>
                 <div style={{ borderTop:'1px solid var(--border)', paddingTop:12, marginTop:8, display:'flex', justifyContent:'space-between' }}>
                   <span style={{ fontSize:'.85rem', color:'var(--text-muted)' }}>Total</span>
-                  <strong style={{ color:'var(--gold)' }}>₹{Number(order.total).toFixed(0)}</strong>
+                  <strong style={{ color:'var(--gold)' }}>Rs. {Number(order.total).toFixed(0)}</strong>
                 </div>
               </div>
             ))}
@@ -858,7 +914,7 @@ export default function UserHome() {
     );
   }
 
-  // ── WISHLIST panel ────────────────────────────────────────
+  // -- WISHLIST panel ----------------------------------------
   function WishlistPanel() {
     const wishBooks = books.filter(b => wishlist.includes(b.id));
     return (
@@ -866,8 +922,8 @@ export default function UserHome() {
         <h2 className="section-title">My <span>Wishlist</span></h2>
         {wishBooks.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-icon">❤️</div>
-            <p>Your wishlist is empty. Browse books and tap ♥ to save.</p>
+            <div className="empty-icon">WL</div>
+            <p>Your wishlist is empty. Browse books and tap ? to save.</p>
           </div>
         ) : (
           <div className="books-grid">
@@ -878,68 +934,44 @@ export default function UserHome() {
     );
   }
 
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
   //  Render
-  // ════════════════════════════════════════════════════════════
+  // ------------------------------------------------------------
   return (
-    <div className="shell">
-      <Sidebar
-        items={navItems}
-        active={panel}
-        onSelect={setPanel}
-        onLogout={handleLogout}
-        user={user}
+    <Layout
+      activeItem={panel}
+      items={navItems}
+      onLogout={handleLogout}
+      onSearchChange={handleTopbarSearchChange}
+      onSelectItem={setPanel}
+      searchLoading={searchLoading}
+      searchPlaceholder="Search books or authors"
+      searchValue={searchQuery}
+      showSidebarIcons
+      title={panelTitle[panel] || 'Browse Books'}
+      user={user}
+    >
+      {panel === 'home' && HomePanel()}
+      {panel === 'search' && SearchPanel()}
+      {panel === 'cart' && CartPanel()}
+      {panel === 'orders' && OrdersPanel()}
+      {panel === 'wishlist' && WishlistPanel()}
+
+      <CheckoutModal
+        cartCount={cartCount}
+        initialValues={checkoutProfile}
+        isOpen={showCheckout}
+        onClose={() => setShowCheckout(false)}
+        onSubmit={placeOrderWithPayment}
+        submitting={placingOrder}
+        total={cartTotal}
       />
-
-      <div className="main-area">
-        {/* Topbar */}
-        <header className="topbar">
-          <span className="topbar-title">
-            {panel === 'home'     && '📚 Browse Books'}
-            {panel === 'search'   && '🔍 Search & Filter'}
-            {panel === 'cart'     && '🛒 My Cart'}
-            {panel === 'orders'   && '📦 My Orders'}
-            {panel === 'wishlist' && '❤️ My Wishlist'}
-          </span>
-          <div className="topbar-search">
-            <span aria-hidden="true">🔎</span>
-            <input
-              onChange={handleTopbarSearchChange}
-              placeholder="Search books or authors"
-              value={searchQuery}
-            />
-            {searchLoading && <span className="spinner" />}
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <span style={{ fontSize:'.8rem', color:'var(--text-muted)' }}>
-              Hi, {user.name || 'Reader'}
-            </span>
-          </div>
-        </header>
-
-        {/* Panels */}
-        {panel === 'home' && HomePanel()}
-        {panel === 'search' && SearchPanel()}
-        {panel === 'cart' && CartPanel()}
-        {panel === 'orders' && OrdersPanel()}
-        {panel === 'wishlist' && WishlistPanel()}
-
-        <CheckoutModal
-          cartCount={cartCount}
-          initialValues={checkoutProfile}
-          isOpen={showCheckout}
-          onClose={() => setShowCheckout(false)}
-          onSubmit={placeOrderWithPayment}
-          submitting={placingOrder}
-          total={cartTotal}
-        />
-      </div>
 
       {/* Quick-view modal */}
       {qv && (
         <div className="modal-backdrop" onClick={() => setQv(null)}>
           <div className="modal-box qv-box" onClick={e => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setQv(null)}>✕</button>
+            <button className="modal-close" onClick={() => setQv(null)}>x</button>
             <div className="qv-inner">
               <img
                 src={qv.image || 'https://via.placeholder.com/180x250/1e2535/7b879f?text=Book'}
@@ -975,18 +1007,18 @@ export default function UserHome() {
                 </div>
 
                 <p style={{ fontSize:'1.4rem', fontWeight:700, color:'var(--gold)', marginBottom:16 }}>
-                  ₹{Number(qv.price).toFixed(0)}
+                  Rs. {Number(qv.price).toFixed(0)}
                 </p>
 
                 <div style={{ display:'flex', gap:12 }}>
                   <button className="btn-primary" style={{ flex:1 }} onClick={() => { addToCart(qv); setQv(null); }}>
-                    🛒 Add to Cart
+                    Add to Cart
                   </button>
                   <button
                     className={`btn-secondary ${wishlist.includes(qv.id) ? 'wish-active' : ''}`}
                     onClick={() => toggleWishlist(qv)}
                   >
-                    {wishlist.includes(qv.id) ? '❤️ Saved' : '🤍 Save'}
+                    {wishlist.includes(qv.id) ? 'Saved' : 'Save'}
                   </button>
                 </div>
               </div>
@@ -994,6 +1026,6 @@ export default function UserHome() {
           </div>
         </div>
       )}
-    </div>
+    </Layout>
   );
 }

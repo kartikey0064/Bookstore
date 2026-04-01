@@ -18,9 +18,9 @@ import ChartCard from '../components/admin/ChartCard';
 import DashboardFilter from '../components/admin/DashboardFilter';
 import { BooksIcon, RatingIcon, RevenueIcon, UsersIcon } from '../components/admin/DashboardIcons';
 import OrdersTable from '../components/admin/OrdersTable';
-import { BarTrendChart, LineTrendChart } from '../components/admin/SimpleCharts';
+import { BarTrendChart, LineTrendChart, PieBreakdownChart } from '../components/admin/SimpleCharts';
 import StatCard from '../components/admin/StatCard';
-import Sidebar    from './Sidebar';
+import Layout from '../components/layout/Layout';
 import StarRating from './StarRating';
 import { toast }  from './Toast';
 import { clearSession, getSession } from '../lib/session';
@@ -217,11 +217,14 @@ function buildDashboardFallbackData({ books, orders, startDate, endDate }) {
   const previousDays = buildDateSeries(previousStartDate, previousEndDate);
   const revenueMap = new Map(currentDays.map(day => [toDateInputValue(day), 0]));
   const ordersMap = new Map(currentDays.map(day => [toDateInputValue(day), 0]));
+  const usersDailyMap = new Map(currentDays.map(day => [toDateInputValue(day), new Set()]));
   const previousSet = new Set(previousDays.map(day => toDateInputValue(day)));
   const monthSeries = buildMonthSeries(startDate, endDate);
   const monthRevenueMap = new Map(monthSeries.map(month => [getMonthKey(month), 0]));
-  const monthUsersMap = new Map(monthSeries.map(month => [getMonthKey(month), 0]));
+  const monthUsersMap = new Map(monthSeries.map(month => [getMonthKey(month), new Set()]));
+  const booksDailyMap = new Map(currentDays.map(day => [toDateInputValue(day), 0]));
   const monthBooksMap = new Map(monthSeries.map(month => [getMonthKey(month), 0]));
+  const ratingsDailyMap = new Map(currentDays.map(day => [toDateInputValue(day), { sum: 0, count: 0 }]));
   const monthRatingsMap = new Map(monthSeries.map(month => [getMonthKey(month), { sum: 0, count: 0 }]));
 
   let currentRevenue = 0;
@@ -237,6 +240,11 @@ function buildDashboardFallbackData({ books, orders, startDate, endDate }) {
       revenueMap.set(key, revenueMap.get(key) + total);
       ordersMap.set(key, ordersMap.get(key) + 1);
       monthRevenueMap.set(getMonthKey(key), (monthRevenueMap.get(getMonthKey(key)) || 0) + total);
+      const normalizedEmail = String(order.userEmail || '').trim().toLowerCase();
+      if (normalizedEmail) {
+        usersDailyMap.get(key)?.add(normalizedEmail);
+        monthUsersMap.get(getMonthKey(key))?.add(normalizedEmail);
+      }
       currentRevenue += total;
       filteredOrders.push(order);
     } else if (previousSet.has(key)) {
@@ -249,25 +257,16 @@ function buildDashboardFallbackData({ books, orders, startDate, endDate }) {
     return createdKey ? createdKey >= startDate && createdKey <= endDate : false;
   });
 
-  const usersByMonth = new Set();
-  filteredOrders.forEach(order => {
-    const orderKey = getDateKey(order.createdAt);
-    const email = String(order.userEmail || '').trim().toLowerCase();
-    if (!orderKey || !email) return;
-    usersByMonth.add(`${getMonthKey(orderKey)}:${email}`);
-  });
-  usersByMonth.forEach(entry => {
-    const [monthKey] = entry.split(':');
-    monthUsersMap.set(monthKey, (monthUsersMap.get(monthKey) || 0) + 1);
-  });
-
   filteredBooks.forEach(book => {
     const createdKey = getDateKey(book.createdAt || book.created_at);
     if (!createdKey) return;
     const monthKey = getMonthKey(createdKey);
+    booksDailyMap.set(createdKey, (booksDailyMap.get(createdKey) || 0) + 1);
     monthBooksMap.set(monthKey, (monthBooksMap.get(monthKey) || 0) + 1);
     const rating = Number(book.rating || 0);
     if (rating > 0) {
+      const daily = ratingsDailyMap.get(createdKey) || { sum: 0, count: 0 };
+      ratingsDailyMap.set(createdKey, { sum: daily.sum + rating, count: daily.count + 1 });
       const current = monthRatingsMap.get(monthKey) || { sum: 0, count: 0 };
       monthRatingsMap.set(monthKey, { sum: current.sum + rating, count: current.count + 1 });
     }
@@ -301,14 +300,30 @@ function buildDashboardFallbackData({ books, orders, startDate, endDate }) {
   const totalUsers = new Set(
     filteredOrders.map(order => String(order.userEmail || '').trim().toLowerCase()).filter(Boolean),
   ).size;
+  const usersDaily = currentDays.map(day => {
+    const key = toDateInputValue(day);
+    return { label: formatShortDate(day), value: usersDailyMap.get(key)?.size || 0 };
+  });
   const usersOverTime = monthSeries.map(month => ({
     label: getMonthLabel(month),
-    value: monthUsersMap.get(getMonthKey(month)) || 0,
+    value: monthUsersMap.get(getMonthKey(month))?.size || 0,
   }));
+  const booksDaily = currentDays.map(day => {
+    const key = toDateInputValue(day);
+    return { label: formatShortDate(day), value: booksDailyMap.get(key) || 0 };
+  });
   const booksOverTime = monthSeries.map(month => ({
     label: getMonthLabel(month),
     value: monthBooksMap.get(getMonthKey(month)) || 0,
   }));
+  const ratingsDaily = currentDays.map(day => {
+    const key = toDateInputValue(day);
+    const current = ratingsDailyMap.get(key) || { sum: 0, count: 0 };
+    return {
+      label: formatShortDate(day),
+      value: current.count ? Number((current.sum / current.count).toFixed(1)) : 0,
+    };
+  });
   const ratingsOverTime = monthSeries.map(month => {
     const current = monthRatingsMap.get(getMonthKey(month)) || { sum: 0, count: 0 };
     return {
@@ -344,8 +359,11 @@ function buildDashboardFallbackData({ books, orders, startDate, endDate }) {
     charts: {
       revenueOverTime,
       ordersOverTime,
+      usersDaily,
       usersOverTime,
+      booksDaily,
       booksOverTime,
+      ratingsDaily,
       ratingsOverTime,
       revenueByMonth,
       booksByCategory: Object.entries(categoryMap)
@@ -373,6 +391,88 @@ function UserPlusNavIcon() {
       <circle cx="9" cy="7" r="4" />
       <path d="M19 8v6" />
       <path d="M16 11h6" />
+    </svg>
+  );
+}
+
+function HomeNavIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.9"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V21h14V9.5" />
+      <path d="M9.5 21v-6h5v6" />
+    </svg>
+  );
+}
+
+function InventoryNavIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M8 6.5h11" />
+      <path d="M8 12h11" />
+      <path d="M8 17.5h11" />
+      <path d="M4.5 6.5h.01" />
+      <path d="M4.5 12h.01" />
+      <path d="M4.5 17.5h.01" />
+    </svg>
+  );
+}
+
+function OrdersNavIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M7 4h10l2 4v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8l2-4Z" />
+      <path d="M9 10h6" />
+      <path d="M9 14h6" />
+    </svg>
+  );
+}
+
+function RevenueNavIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M12 2v20" />
+      <path d="M17 6.5c0-1.4-1.8-2.5-4-2.5s-4 1.1-4 2.5 1.3 2.2 4 2.8c2.7.6 4 1.4 4 3.2S15.2 16 13 16s-4-1.1-4-2.5" />
     </svg>
   );
 }
@@ -861,32 +961,51 @@ export default function AdminHome() {
   //  Sidebar nav
   // ════════════════════════════════════════════════════════════
 
-  const navItems = [
+  const legacyNavItems = [
     { id:'home',      icon:'🏠', label:'Dashboard' },
     { id:'inventory', icon:'📋', label:'Inventory' },
     { id:'orders',    icon:'📦', label:'All Orders', badge: allOrders.length },
     { id:'revenue',   icon:'💰', label:'Revenue' },
     { id:'admins',    icon:'ðŸ‘¤', label:'Add Admin' },
   ];
-  const sidebarItems = navItems.map(item => (
+  const legacySidebarItems = legacyNavItems.map(item => (
     item.id === 'admins'
       ? { ...item, icon: <UserPlusNavIcon /> }
       : item
   ));
+  const sidebarItems = [
+    { id:'home', icon:<HomeNavIcon />, label:'Dashboard' },
+    { id:'inventory', icon:<InventoryNavIcon />, label:'Inventory' },
+    { id:'orders', icon:<OrdersNavIcon />, label:'All Orders', badge: allOrders.length },
+    { id:'revenue', icon:<RevenueNavIcon />, label:'Revenue' },
+    { id:'admins', icon:<UserPlusNavIcon />, label:'Add Admin' },
+  ];
 
   // ════════════════════════════════════════════════════════════
   //  Panel: HOME (dashboard)
   // ════════════════════════════════════════════════════════════
 
-  function DashboardPanel() {
+function DashboardPanel() {
     const meta = dashboardSnapshot.meta || {};
     const metrics = dashboardSnapshot.metrics || {};
     const charts = dashboardSnapshot.charts || {};
     const recentOrders = dashboardSnapshot.recentOrders || [];
-    const revenueSeries = charts.revenueByMonth || charts.revenueOverTime || [];
-    const usersSeries = charts.usersOverTime || [];
-    const booksSeries = charts.booksOverTime || [];
-    const ratingsSeries = charts.ratingsOverTime || [];
+    const isShortRange = Number(meta.spanDays || 0) <= 45;
+    const periodLabel = isShortRange ? 'Day' : 'Month';
+    const periodLabelLower = periodLabel.toLowerCase();
+    const revenueSeries = isShortRange
+      ? (charts.revenueOverTime || charts.revenueByMonth || [])
+      : (charts.revenueByMonth || charts.revenueOverTime || []);
+    const usersSeries = isShortRange
+      ? (charts.usersDaily || charts.usersOverTime || [])
+      : (charts.usersOverTime || charts.usersDaily || []);
+    const booksSeries = isShortRange
+      ? (charts.booksDaily || charts.booksOverTime || [])
+      : (charts.booksOverTime || charts.booksDaily || []);
+    const ratingsSeries = isShortRange
+      ? (charts.ratingsDaily || charts.ratingsOverTime || [])
+      : (charts.ratingsOverTime || charts.ratingsDaily || []);
+    const categorySeries = charts.booksByCategory || [];
     const rangeLabel = dashboardFilterType === 'custom'
       ? `${formatShortDate(meta.startDate || dashboardRange.startDate)} to ${formatShortDate(meta.endDate || dashboardRange.endDate)}`
       : dashboardFilterType === '30d'
@@ -974,35 +1093,43 @@ export default function AdminHome() {
 
         <div className="dashboard-chart-grid">
           <ChartCard
-            subtitle={`Monthly revenue bars within ${rangeLabel.toLowerCase()}`}
-            title="Total Revenue By Month"
+            subtitle={`${isShortRange ? 'Daily' : 'Monthly'} revenue across ${rangeLabel.toLowerCase()}`}
+            title={`Total Revenue By ${periodLabel}`}
           >
             <BarTrendChart
               data={revenueSeries}
-              emptyMessage="No monthly revenue data available"
+              emptyMessage={`No ${periodLabelLower} revenue data available`}
               valueFormatter={value => formatCurrency(value)}
             />
           </ChartCard>
 
           <ChartCard
-            subtitle="Monthly user growth across the selected range"
-            title="Total Users By Month"
+            subtitle={`${isShortRange ? 'Daily' : 'Monthly'} active customer activity in the selected range`}
+            title={`Total Users By ${periodLabel}`}
           >
-            <LineTrendChart data={usersSeries} emptyMessage="No monthly user data available" />
+            <LineTrendChart data={usersSeries} emptyMessage={`No ${periodLabelLower} user data available`} />
           </ChartCard>
 
           <ChartCard
-            subtitle="Monthly catalog additions inside the selected range"
-            title="Total Books By Month"
+            subtitle={`${isShortRange ? 'Daily' : 'Monthly'} catalog additions inside the selected range`}
+            title={`Total Books By ${periodLabel}`}
           >
-            <LineTrendChart data={booksSeries} emptyMessage="No monthly book data available" />
+            <LineTrendChart data={booksSeries} emptyMessage={`No ${periodLabelLower} book data available`} />
           </ChartCard>
 
           <ChartCard
-            subtitle="Average monthly book rating based on books in range"
-            title="Average Rating By Month"
+            subtitle={`Average ${periodLabelLower} book rating based on books in range`}
+            title={`Average Rating By ${periodLabel}`}
           >
-            <LineTrendChart data={ratingsSeries} emptyMessage="No monthly rating data available" />
+            <LineTrendChart data={ratingsSeries} emptyMessage={`No ${periodLabelLower} rating data available`} />
+          </ChartCard>
+
+          <ChartCard
+            className="dashboard-chart-wide"
+            subtitle="Category mix for books included in the selected range"
+            title="Books By Category"
+          >
+            <PieBreakdownChart data={categorySeries} />
           </ChartCard>
         </div>
 
@@ -1358,32 +1485,20 @@ export default function AdminHome() {
   const headerTitle = panel === 'admins' ? 'Add Admin' : panelTitle[panel] || 'Admin';
 
   return (
-    <div className="shell">
-      <Sidebar
-        items={sidebarItems}
-        active={panel}
-        onSelect={setPanel}
-        onLogout={handleLogout}
-        user={user}
-      />
-
-      <div className="main-area">
-        <header className="topbar">
-          <span className="topbar-title">{headerTitle}</span>
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <span style={{ background:'rgba(201,168,76,.15)', border:'1px solid rgba(201,168,76,.3)', color:'var(--gold)', fontSize:'.72rem', fontWeight:700, padding:'3px 10px', borderRadius:99, letterSpacing:'.06em', textTransform:'uppercase' }}>
-              Admin
-            </span>
-            <span style={{ fontSize:'.8rem', color:'var(--text-muted)' }}>{user.name}</span>
-          </div>
-        </header>
-
-        {panel === 'home'      && <DashboardPanel />}
-        {panel === 'inventory' && <InventoryPanel />}
-        {panel === 'orders'    && <OrdersPanel />}
-        {panel === 'revenue'   && <RevenuePanel />}
-        {panel === 'admins'    && <AdminUsersPanel />}
-      </div>
-    </div>
+    <Layout
+      activeItem={panel}
+      items={sidebarItems}
+      onLogout={handleLogout}
+      onSelectItem={setPanel}
+      profileRole="Admin Console"
+      title={headerTitle}
+      user={user}
+    >
+      {panel === 'home'      && <DashboardPanel />}
+      {panel === 'inventory' && <InventoryPanel />}
+      {panel === 'orders'    && <OrdersPanel />}
+      {panel === 'revenue'   && <RevenuePanel />}
+      {panel === 'admins'    && <AdminUsersPanel />}
+    </Layout>
   );
 }
